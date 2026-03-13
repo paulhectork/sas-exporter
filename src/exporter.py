@@ -50,14 +50,17 @@ class SasExporter():
         return self
 
     def fetch_annotations(self) -> "SasExporter":
-        ...
-        # NOTE: self.save_data is a dict or { <manifest URI>: <path to downloaded annotationList> }
+        # self.save_data is a dict or { <manifest URI>: <path to downloaded annotationList> }
         manifests_to_download = [
             m for m in self.manifests if m not in self.save_data.keys()
         ]
         for m_uri in manifests_to_download:
             ...
             # NOTE here, we DL all annotations for a single manifest.
+            # NOTE pipeline (without multiprocessing):
+            #   - DL the manifest.
+            #   - if it works, increment self.save_data
+            #   - else, log an error message
         return self
 
     def pipeline(self) -> "SasExporter":
