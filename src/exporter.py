@@ -92,9 +92,11 @@ class SasExporter():
         self.manifests = manifests
         return self
 
-    # TODO tqdm
     # TODO multiprocessing
+    # TODO tqdm
     # TODO error checking in request fails
+    # NOTE we're maybe gonna have a problem with writing to self.save_data: memory sharing between processes
+    # minimally, see: https://stackoverflow.com/a/29012047
     def fetch_annotations(self) -> "SasExporter":
         # self.save_data is a dict or { <manifest URI>: <path to downloaded annotationList> }
         manifests_to_download = [
@@ -108,11 +110,6 @@ class SasExporter():
             self.write_annotation_list(data, out_path)
             self.save_data[manifest_uri] = out_path
 
-            # NOTE here, we DL all annotations for a single manifest.
-            # NOTE pipeline (without multiprocessing):
-            #   - DL the manifest.
-            #   - if it works, increment self.save_data
-            #   - else, log an error message
         return self
 
     def pipeline(self) -> "SasExporter":
