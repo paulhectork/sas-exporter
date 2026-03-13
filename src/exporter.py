@@ -4,8 +4,40 @@ from typing import List, Dict, Tuple
 import requests
 from tqdm import tqdm
 
-from .utils import SAS_ENDPOINT, SAVE_FILE, OUT_DIR, ANNOTATIONS_DIR, json_read_if_exists, json_write
+from .utils import (
+    SAS_ENDPOINT,
+    SAVE_FILE,
+    OUT_DIR,
+    ANNOTATIONS_DIR,
+    json_read_if_exists,
+    json_write,
+    json_parse
+)
 from .logger import logger
+
+
+
+def manifest_uri_to_short_id(manifest_uri: str) -> str:
+    return manifest_uri.split("/")[-2]
+
+def iiif_collection_to_manifest_uri_list(iiif_collection: Dict) -> List[str]:
+    return [
+        m["@id"]
+        for m in iiif_collection["manifests"]
+        if m["@type"] == "sc:Manifest"
+    ]
+
+def fetch_to_dict(url: str, raise_=True) -> Dict:
+    try:
+        r = requests.get(url)
+        if raise_:
+            r.raise_for_status()
+        # note: json_parse uses orjson, which is faster than native json => don't use requests.json()
+        return json_parse(r.text)
+    except Exception as e:
+        if raise_:
+            raise Exception
+        return {}
 
 
 class SasExporter():
@@ -13,49 +45,69 @@ class SasExporter():
     def __init__(self):
         # check that the endpoint actually exists
         try:
-            requests.get(SAS_ENDPOINT)
+            requests.get(f"{SAS_ENDPOINT}/manifests")
         except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError):
             logger.error(f"Endpoint {SAS_ENDPOINT} could not be reached ! Exiting...")
             exit(1)
 
         self.endpoint = SAS_ENDPOINT
-        self.logger = logger
         self.annotations_dir = ANNOTATIONS_DIR
         self.out_dir = OUT_DIR
         self.save_file = SAVE_FILE
         self.save_data, exists = json_read_if_exists(self.save_file)
         self.manifests: List[str] = []
 
-        self.logger.info(f"Initiated SasExporter successfully.")
+        logger.info(f"Initiated SasExporter successfully.")
         if exists:
-            self.logger.info(f"Skipping {len(list(self.save_data.keys()))} pre-fetched manifests")
+            logger.info(f"Skipping {len(list(self.save_data.keys()))} pre-fetched manifests")
         else:
-            self.logger.info(f"No pre-fetched manifests to load. Everything will be exported.")
+            logger.info(f"No pre-fetched manifests to load. Everything will be exported.")
         return
 
-    def write_annotation(self, data) -> "SasExporter":
-        ...
+    @property
+    def endpoint_manifests(self) -> str:
+        return f"{self.endpoint}/manifests"
+
+    def endpoint_annotations(self, manifest_short_id: str) -> str:
+        # search-api endpoint returns all annotations for a manifest, paginated.
+        return f"{self.endpoint}/search-api/{manifest_short_id}/search"
+
+    def annotation_list_path(self, manifest_short_id: str) -> str|Path:
+        return self.annotations_dir / f"{manifest_short_id}.json"
+
+    def write_annotation_list(self, data, fp: str|Path) -> "SasExporter":
+        json_write(data, fp)
         return self
 
     def write_save_data(self) -> "SasExporter":
         json_write(self.save_data, self.save_file)
         return self
 
+    # TODO error checking if request fails
     def fetch_manifests(self) -> "SasExporter":
-        ...
         manifests = []
-        # todo fetch
-        self.logger.info(f"Found {len(manifests)} for which to extract annotations.")
+        collection = fetch_to_dict(self.endpoint_manifests)
+        manifests = iiif_collection_to_manifest_uri_list(collection)
+        logger.info(f"Found {len(manifests)} for which to extract annotations.")
         self.manifests = manifests
         return self
 
+    # TODO tqdm
+    # TODO multiprocessing
+    # TODO error checking in request fails
     def fetch_annotations(self) -> "SasExporter":
         # self.save_data is a dict or { <manifest URI>: <path to downloaded annotationList> }
         manifests_to_download = [
             m for m in self.manifests if m not in self.save_data.keys()
         ]
-        for m_uri in manifests_to_download:
-            ...
+        for manifest_uri in manifests_to_download:
+            manifest_short_id = manifest_uri_to_short_id(manifest_uri)
+            search_api_endpoint = self.endpoint_annotations(manifest_short_id)
+            out_path = self.annotation_list_path(manifest_short_id)
+            data = fetch_to_dict(search_api_endpoint)
+            self.write_annotation_list(data, out_path)
+            self.save_data[manifest_uri] = out_path
+
             # NOTE here, we DL all annotations for a single manifest.
             # NOTE pipeline (without multiprocessing):
             #   - DL the manifest.
