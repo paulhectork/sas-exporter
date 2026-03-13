@@ -1,7 +1,7 @@
 import os
 import json
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 
 import orjson
 
@@ -48,7 +48,7 @@ def json_parse(data: str) -> Dict:
     return orjson.loads(data)
 
 
-def json_write(data: Dict, path: Path|str) -> None:
+def json_write(data: Dict|List, path: Path|str) -> None:
     """write a Dict to a JSON file"""
     with open(path, mode="wb") as fh:
         d_str = orjson.dumps(data, option=orjson.OPT_INDENT_2)
@@ -68,6 +68,7 @@ ROOT_DIR = SRC_DIR.parent.resolve()
 LOG_DIR = set_and_make_dir_from_env("LOG_DIR", ROOT_DIR)
 OUT_DIR = set_and_make_dir_from_env("OUT_DIR", ROOT_DIR)
 ANNOTATIONS_DIR = make_path(OUT_DIR / "annotations", True)
-SAVE_FILE = Path(OUT_DIR / "_save.json")
+SAVE_OK_FILE = Path(OUT_DIR / "_save_ok.json")
+SAVE_ERR_FILE = Path(OUT_DIR / "_save_err.json")
 SAS_ENDPOINT = get_env_var("SAS_ENDPOINT")
-N_PROCESSES = int(get_env_var("N_PROCESSES"))
+MAX_CONNECTIONS = int(get_env_var("MAX_CONNECTIONS"))
