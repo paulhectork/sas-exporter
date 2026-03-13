@@ -3,11 +3,6 @@ from pathlib import Path
 
 from .utils import LOG_DIR
 
-info_handler = None
-error_handler = None
-console_handler = None
-logger = None
-
 # Custom formatter
 class CustomFormatter(logging.Formatter):
     def format(self, record):
@@ -19,7 +14,7 @@ class CustomFormatter(logging.Formatter):
         time_str = self.formatTime(record, "%H:%M:%S")
 
         # Custom format: $status:$time:$module_or_file:$function: message
-        return f"{record.levelname}:{time_str}:{module_name}:{func_name}: {record.getMessage()}"
+        return f"{record.levelname}::{time_str}::{module_name}::{func_name}:: {record.getMessage()}"
 
 formatter = CustomFormatter()
 
