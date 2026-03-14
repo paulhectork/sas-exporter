@@ -88,7 +88,6 @@ class SasExporter():
         json_write(save_err_data, self.save_err_file)
         return self
 
-    # TODO error handling if request fails
     async def fetch_manifests(self) -> "SasExporter":
         manifests = []
         async with aiohttp.ClientSession(
@@ -96,8 +95,9 @@ class SasExporter():
         ) as session:
             collection = await fetch_to_dict(session, self.endpoint_manifests)
             manifests = iiif_collection_to_manifest_uri_list(collection)
-        logger.info(f"Found {len(manifests)} for which to extract annotations.")
+        json_write(manifests, self.out_dir / "manifests_collection.json")
         self.manifests = manifests
+        logger.info(f"Found {len(manifests)} for which to extract annotations.")
         return self
 
     # TODO pagination
@@ -125,7 +125,6 @@ class SasExporter():
             return manifest_uri, None
 
     async def fetch_annotations(self) -> "SasExporter":
-        # self.save_data is a dict or { <manifest URI>: <path to downloaded annotationList> }
         manifests_to_download = [
             m for m in self.manifests if m not in self.save_data.keys()
         ]
