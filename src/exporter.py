@@ -31,9 +31,6 @@ def iiif_collection_to_manifest_uri_list(iiif_collection: Dict) -> List[str]:
     ]
 
 async def fetch_to_dict(session:aiohttp.ClientSession, url: str) -> Dict:
-    import random
-    if random.randint(0, 10) == 5:
-        raise ValueError
     async with session.get(url) as response:
         r_text = await response.text()
         return json_parse(r_text)
@@ -111,6 +108,10 @@ class SasExporter():
     ) -> Tuple[str, str|None]:
         """
         pipeline to download a single annotation_list
+
+        :returns:
+            - if the download succeeds: (<manifest_uri, path_to_downloaded_annotation_list>)
+            - if the download fails: (<manifest_uri>, None)
         """
         manifest_short_id = manifest_uri_to_short_id(manifest_uri)
         search_api_endpoint = self.endpoint_annotations(manifest_short_id)
@@ -139,7 +140,7 @@ class SasExporter():
             results = await tqdm_asyncio.gather(
                 *tasks,
                 total=len(manifests_to_download),
-                desc=f"DL annotation lists"
+                desc=f"Downloading annotation lists"
             )
             self.save_data = { m_uri: path for m_uri, path in results }
         return self
