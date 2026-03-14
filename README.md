@@ -35,7 +35,9 @@ uv run main.py
 
 1. **get manifests**: query `$SAS_ENDPOINT/manifests` to get the collection of all manifests indexed in the SAS instance
 2. **get annotations**: for each manifest, query the `search-api` to retrieve all annotations related to the manifest
-3. **progress saving**: if the program stops before completing, the files `$OUT_DIR/_save_ok.json` and `$OUT_DIR/_save_err.json` track respectively the manifests processed successfully and the ones that failed. At next steps, skip all files listed in `_save_ok.json`.
+3. **progress saving**: if the program stops before completing, the files `$OUT_DIR/_save_ok.json` and `$OUT_DIR/_save_err.json` track respectively the manifests processed successfully and the ones that failed. 
+    - if `_save_ok.json` contains items, they will not be redownloaded on the next runs of `sas-exporter`
+    - annotations of the manifests listed in `_save_err.json` will, however, be redownloaded. 
 
 ---
 
