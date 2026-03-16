@@ -6,11 +6,8 @@ from .utils import LOG_DIR
 # Custom formatter
 class CustomFormatter(logging.Formatter):
     def format(self, record):
-        # Extract the module/file name without extension
         module_name = record.module
-        # Get function name
         func_name = record.funcName
-        # Get time in HH:MM:SS format
         time_str = self.formatTime(record, "%H:%M:%S")
 
         # Custom format: $status:$time:$module_or_file:$function: message
