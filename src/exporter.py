@@ -195,4 +195,5 @@ class SasExporter():
             save_ok_data, save_err_data = self.split_save_data()
             logger.info(f"Exporting data (success: {len(save_ok_data.keys())}, error: {len(save_err_data)}).")
             self.write_save_data(save_ok_data, save_err_data)
+            logger.info("SAS export done (* ´ ▽ ` *)")
         return self

@@ -8,10 +8,11 @@ class CustomFormatter(logging.Formatter):
     def format(self, record):
         module_name = record.module
         func_name = record.funcName
-        time_str = self.formatTime(record, "%H:%M:%S")
+        time_str = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
+        lineno = record.lineno
 
         # Custom format: $status:$time:$module_or_file:$function: message
-        return f"{record.levelname}::{time_str}::{module_name}::{func_name}:: {record.getMessage()}"
+        return f"{record.levelname}::{time_str}::{module_name}::L.{lineno}::{func_name}:: {record.getMessage()}"
 
 formatter = CustomFormatter()
 
