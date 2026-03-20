@@ -1,7 +1,8 @@
 import os
 import json
+import aiohttp
 from pathlib import Path
-from typing import Dict, Tuple, List
+from typing import Dict, Generator, Tuple, List
 
 import orjson
 
@@ -42,6 +43,20 @@ def json_read(path: Path|str) -> Dict:
         d_str = fh.read()
         return orjson.loads(d_str)
 
+def json_read_from_dir(path: Path|str) -> Generator[Tuple[str|Path, Dict], None, None]:
+    """
+    generator that yields (filepath, <JSON contents as dict>) for all files in a directory
+    if there was a problem parsing a file, yield `fp, {}` for type consistency
+    """
+    for fp in Path(path).iterdir():
+        if fp.is_file():
+            try:
+                yield fp, json_read(fp)
+            except orjson.JSONDecodeError:
+                yield fp, {}
+        else:
+            yield fp, {}
+    return
 
 def json_parse(data: str) -> Dict:
     """parse a string to a Dict"""
@@ -62,6 +77,18 @@ def json_read_if_exists(path: Path|str) -> Tuple[Dict, bool]:
     data = json_read(path)
     return data, True
 
+def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
+    return aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(limit=max_connections)
+    )
+
+async def fetch_to_dict(session: aiohttp.ClientSession, url: str) -> Dict:
+    """
+    must be run in an `async with aiohttp.ClientSession(...) as session` block:
+    """
+    async with session.get(url) as response:
+        r_text = await response.text()
+        return json_parse(r_text)
 
 SRC_DIR = Path(__file__).parent.resolve()
 ROOT_DIR = SRC_DIR.parent.resolve()

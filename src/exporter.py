@@ -1,10 +1,7 @@
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Tuple
-from multiprocessing import Pool
 
-import aiohttp
-from tqdm import tqdm
 from tqdm.asyncio import tqdm_asyncio
 
 from .utils import (
@@ -16,7 +13,8 @@ from .utils import (
     MAX_CONNECTIONS,
     json_read_if_exists,
     json_write,
-    json_parse
+    fetch_to_dict,
+    make_session
 )
 from .logger import logger
 
@@ -61,9 +59,7 @@ class SasExporter():
         # list of manifests to download
         self.manifests: List[str] = []
         # aiohttp session
-        self.make_session = lambda: aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=self.max_connections)
-        )
+        self.make_session = lambda: make_session(self.max_connections)
 
         logger.info(f"Initiated SasExporter successfully.")
         if exists:
@@ -106,9 +102,7 @@ class SasExporter():
 
     async def fetch_to_dict(self, url: str) -> Dict:
         async with self.make_session() as session:
-            async with session.get(url) as response:
-                r_text = await response.text()
-                return json_parse(r_text)
+            return await fetch_to_dict(session, url)
 
     async def fetch_annotation_list_paginated(self, url: str) -> Dict:
         """
@@ -182,7 +176,7 @@ class SasExporter():
     async def pipeline_async(self) -> "SasExporter":
         logger.info("Fetching all indexed manifests.")
         await self.fetch_manifests()
-        logger.info(f"Found {len(self.manifests)} for which to extract annotations.")
+        logger.info(f"Found {len(self.manifests)} manifests for which to extract annotations.")
         logger.info(f"Fetching annotations for {len(self.manifests)} manifests.")
         await self.fetch_annotations()
         logger.info(f"Finished fetching annotations.")
