@@ -18,6 +18,8 @@ from .utils import (
 )
 from .logger import logger
 
+STEP_NAME = "export"
+
 def manifest_uri_to_short_id(manifest_uri: str) -> str:
     return manifest_uri.split("/")[-2]
 
@@ -174,6 +176,7 @@ class SasExporter():
         return self
 
     async def pipeline_async(self) -> "SasExporter":
+        logger.info(f"Exporting data from '{SAS_ENDPOINT}'")
         logger.info("Fetching all indexed manifests.")
         await self.fetch_manifests()
         logger.info(f"Found {len(self.manifests)} manifests for which to extract annotations.")
@@ -189,5 +192,9 @@ class SasExporter():
             save_ok_data, save_err_data = self.split_save_data()
             logger.info(f"Exporting data (success: {len(save_ok_data.keys())}, error: {len(save_err_data)}).")
             self.write_save_data(save_ok_data, save_err_data)
-            logger.info("SAS export done (* ´ ▽ ` *)")
         return self
+
+def export():
+    logger.info(f"RUNNING   : {STEP_NAME} (* ´ ▽ ` *)")
+    SasExporter().pipeline()
+    logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
