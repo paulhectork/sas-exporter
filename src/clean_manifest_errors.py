@@ -1,17 +1,9 @@
-# validate AnnotationLists by ensuring their target manifest(s) can be fetched.
-# for each AnnotationList, we assert that it point to at least 1 IIIF manifest
-# that is accessible through HTTP(s).
-# paths to valid AnnotationLists are saved to $OUT_DIR/annotationlists_valid.txt
-
-from dotenv import load_dotenv
-load_dotenv()  # NOTE: necessary to load .env before importing variables relying on the env !
-
 import aiohttp
 import asyncio
 from orjson import JSONDecodeError
 from tqdm.asyncio import tqdm_asyncio
 
-from utils import (
+from .utils import (
     ANNOTATIONS_DIR,
     MAX_CONNECTIONS,
     OUT_DIR,
@@ -19,7 +11,7 @@ from utils import (
     json_read_from_dir,
     make_session
 )
-from logger import logger
+from .logger import logger
 
 STEP_NAME = "clean_manifest_errors"
 
@@ -63,7 +55,6 @@ async def pipeline():
             desc="Validating manifests"
         )
         valid_manifest_urls = [ m for m in results if m is not None ]
-        print(valid_manifest_urls)
     # extract paths to annotation lists that point to at least 1 manifest can be fetched
     valid_annotation_list = [
         fp
@@ -83,6 +74,12 @@ async def pipeline():
     # main should have 3 possible subcommands, export, test_pagination and clean_manifest_errors
 
 def clean_manifest_errors():
+    """
+    validate AnnotationLists by ensuring their target manifest(s) can be fetched.
+    for each AnnotationList, we assert that it point to at least 1 IIIF manifest
+    that is accessible through HTTP(s).
+    paths to valid AnnotationLists are saved to $OUT_DIR/annotationlists_valid.txt
+    """
     logger.info(f"RUNNING: {STEP_NAME}")
     asyncio.run(pipeline())
     logger.info(f"COMPLETED: {STEP_NAME}  (* ´ ▽ ` *)")

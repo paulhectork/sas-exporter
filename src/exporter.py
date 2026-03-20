@@ -195,6 +195,6 @@ class SasExporter():
         return self
 
 def export():
-    logger.info(f"RUNNING   : {STEP_NAME} (* ´ ▽ ` *)")
+    logger.info(f"RUNNING   : {STEP_NAME}")
     SasExporter().pipeline()
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
