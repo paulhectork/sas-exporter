@@ -45,6 +45,7 @@ uv run main.py test_pagination
 
 ```bash
 uv run main.py clean_manifest_errors
+```
 
 3. [AIKON-SPECIFIC] **update annotations** from regions-extraction-as-target to digitization-as-target (see docstring of `./src/clean_anno_to_digit`).
 
