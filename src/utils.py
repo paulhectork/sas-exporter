@@ -26,6 +26,8 @@ def make_path(path: str | Path, is_dir: bool = True) -> Path:
     if is_dir:
         path.mkdir(exist_ok=True)
     else:
+        if path.is_file():
+            raise FileExistsError
         with open(path, mode="w"):
             pass
     return path
