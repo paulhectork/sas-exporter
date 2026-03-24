@@ -26,7 +26,7 @@ from .utils import (
 from .logger import logger
 
 
-STEP_NAME = "clean_anno_to_digit"
+STEP_NAME = "anno_to_digit"
 
 
 regex_short_id = re.compile(r"^(wit\d+_[a-z]+\d+)_anno\d+$")
@@ -97,7 +97,7 @@ def update_annotation(annotation: Dict):
 
 
 def pipeline():
-    out_dir = OUT_DIR / f"{ANNOTATIONS_DIR.name}_clean_to_digit"
+    out_dir = OUT_DIR / f"{ANNOTATIONS_DIR.name}_{STEP_NAME}"
     make_path(out_dir, is_dir=True)
 
     # update each AnnotationList and write to file
@@ -114,7 +114,7 @@ def pipeline():
     return
 
 
-def clean_anno_to_digit():
+def anno_to_digit():
     logger.info(f"RUNNING: {STEP_NAME}")
     pipeline()
     logger.info(f"COMPLETED: {STEP_NAME}  (* ´ ▽ ` *)")

@@ -47,10 +47,10 @@ uv run main.py test_pagination
 uv run main.py clean_manifest_errors
 ```
 
-3. [AIKON-SPECIFIC] **update annotations** from regions-extraction-as-target to digitization-as-target (see docstring of `./src/clean_anno_to_digit`).
+3. [AIKON-SPECIFIC] **update annotations** from regions-extraction-as-target to digitization-as-target (see docstring of `./src/anno_to_digit`).
 
 ```bash
-uv run main.py clean_anno_to_digit
+uv run main.py anno_to_digit
 ```
 
 ---
@@ -59,9 +59,9 @@ uv run main.py clean_anno_to_digit
 
 1. **get manifests**: query `$SAS_ENDPOINT/manifests` to get the collection of all manifests indexed in the SAS instance
 2. **get annotations**: for each manifest, query the `search-api` to retrieve all annotations related to the manifest
-3. **progress saving**: if the program stops before completing, the files `$OUT_DIR/_save_ok.json` and `$OUT_DIR/_save_err.json` track respectively the manifests processed successfully and the ones that failed. 
+3. **progress saving**: if the program stops before completing, the files `$OUT_DIR/_save_ok.json` and `$OUT_DIR/_save_err.json` track respectively the manifests processed successfully and the ones that failed.
     - if `_save_ok.json` contains items, they will not be redownloaded on the next runs of `sas-exporter`
-    - annotations of the manifests listed in `_save_err.json` will, however, be redownloaded. 
+    - annotations of the manifests listed in `_save_err.json` will, however, be redownloaded.
 
 ---
 
@@ -75,7 +75,7 @@ $OUT_DIR/                            # output directory
  |_ annotationlists_valid.txt        # output of `clean_manifest_errors`
  |_ annotations/                     # folder storing all annotations
  |   |_ $manifest_short_id.json      # all annotations related to a single manifest
- |_ annotations_clean_anno_to_digit  # output of `clean_anno_to_digit`, same structure as `annotations/`
+ |_ annotations_anno_to_digit  # output of `anno_to_digit`, same structure as `annotations/`
      |_ $manifest_short_id.json      # updated annotationlist
 ```
 
@@ -86,7 +86,7 @@ $OUT_DIR/                            # output directory
 - fast JSON parsing and stringifying with [`orjson`](https://github.com/ijl/orjson)
 - entierly async, since SAS-exporting is heavily I/O-bound, using [`asyncio`](https://docs.python.org/3/library/asyncio.html) and [`aiohttp`](https://docs.aiohttp.org/en/stable/index.html).
 
---- 
+---
 
 ## license
 

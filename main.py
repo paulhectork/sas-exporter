@@ -8,7 +8,7 @@ from src.logger import logger
 from src.exporter import export
 from src.test_pagination import test_pagination
 from src.clean_manifest_errors import clean_manifest_errors
-from src.clean_anno_to_digit import clean_anno_to_digit
+from src.anno_to_digit import anno_to_digit
 
 def cli():
     logger.info("*" * 50)
@@ -25,13 +25,13 @@ def cli():
             clean_manifest_errors    validate exported AnnotationLists by ensuring their
                                      target manifest(s) can be fetched. save paths to valid
                                      AnnotationLists to a file
-            clean_anno_to_digit      aikon-specific process to migrate manifest structure
+            anno_to_digit      aikon-specific process to migrate manifest structure
         """),
-        usage="uv run main.py [export|clean_manifest_errors|test_pagination|clean_anno_to_digit]"
+        usage="uv run main.py [export|clean_manifest_errors|test_pagination|anno_to_digit]"
     )
     parser.add_argument(
         "command",
-        choices=["export", "test_pagination", "clean_manifest_errors", "clean_anno_to_digit"]
+        choices=["export", "test_pagination", "clean_manifest_errors", "anno_to_digit"]
     )
 
     args = parser.parse_args()
@@ -39,8 +39,8 @@ def cli():
         export()
     elif args.command == "clean_manifest_errors":
         clean_manifest_errors()
-    elif args.command == "clean_anno_to_digit":
-        clean_anno_to_digit()
+    elif args.command == "anno_to_digit":
+        anno_to_digit()
     elif args.command == "test_pagination":
         test_pagination()
 
