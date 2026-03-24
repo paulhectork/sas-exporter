@@ -50,7 +50,7 @@ uv run main.py clean_manifest_errors
 3. [AIKON-SPECIFIC] **update annotations** from regions-extraction-as-target to digitization-as-target (see docstring of `./src/clean_anno_to_digit`).
 
 ```bash
-uv run main.py clean_anno_to_digit`
+uv run main.py clean_anno_to_digit
 ```
 
 ---
@@ -76,6 +76,7 @@ $OUT_DIR/                            # output directory
  |_ annotations/                     # folder storing all annotations
  |   |_ $manifest_short_id.json      # all annotations related to a single manifest
  |_ annotations_clean_anno_to_digit  # output of `clean_anno_to_digit`, same structure as `annotations/`
+     |_ $manifest_short_id.json      # updated annotationlist
 ```
 
 ---
