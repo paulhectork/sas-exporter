@@ -91,8 +91,17 @@ def update_annotation(annotation: Dict):
     elif isinstance(body, dict) and len(body.keys()) > 0:
         body = [body, tag]
     else:
-        body = tag
-    annotation["resource"] = body
+        body = [tag]
+
+    # 3. drop the "$root_url/sas/full_text" key from body (auto-generated in SAS, useless in aiiinotate)
+    body_out = []
+    for item in body:
+        k_list = [ k for k in item.keys() if k.endswith("/sas/full_text") ]
+        for k in k_list:
+            del item[k]
+        body_out.append(item)
+
+    annotation["resource"] = body_out
     return annotation
 
 
