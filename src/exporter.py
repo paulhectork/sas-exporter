@@ -294,7 +294,3 @@ def export(stategy: Literal["search-api", "canvas"], alt_url_root: str|None):
     logger.info(f"RUNNING   : {STEP_NAME}")
     SasExporter(stategy, alt_url_root).pipeline()
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
-
-"Y" "https://vhs.huma-num.fr/vhs/iiif/v2/wit497_pdf497/manifest.json"
-"N" "https://vhs.huma-num.fr/vhs/iiif/v2/wit497_pdf497_anno497/manifest.json"
-"Y" "https://vhs.huma-num.fr/vhs/iiif/v2/wit568_pdf568_anno568/manifest.json"
