@@ -1,3 +1,4 @@
+import re
 import os
 import json
 import aiohttp
@@ -84,13 +85,16 @@ def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
         connector=aiohttp.TCPConnector(limit=max_connections)
     )
 
-async def fetch_to_dict(session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict:
+async def fetch_to_json(session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:
     """
     must be run in an `async with aiohttp.ClientSession(...) as session` block:
     """
     async with session.get(url, params=params) as response:
+        response.raise_for_status()
         r_text = await response.text()
-        return json_parse(r_text)
+    return json_parse(r_text)
+
+URL_ROOT_REGEX = re.compile(r"^https?:\/\/[^\/]+")
 
 SRC_DIR = Path(__file__).parent.resolve()
 ROOT_DIR = SRC_DIR.parent.resolve()
@@ -101,3 +105,10 @@ SAVE_OK_FILE = Path(OUT_DIR / "_save_ok.json")
 SAVE_ERR_FILE = Path(OUT_DIR / "_save_err.json")
 SAS_ENDPOINT = get_env_var("SAS_ENDPOINT")
 MAX_CONNECTIONS = int(get_env_var("MAX_CONNECTIONS"))
+
+ANNOTATION_LIST_TEMPLATE = {
+    "@context": "http://iiif.io/api/presentation/2/context.json",
+    "@type": "sc:AnnotationList",
+    "@id": "",
+    "resources": []
+}

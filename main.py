@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 import click
@@ -5,10 +6,16 @@ from dotenv import load_dotenv
 load_dotenv()  # NOTE: necessary to load .env before importing variables relying on the env !
 
 from src.logger import logger
+from src.utils import URL_ROOT_REGEX
 from src.exporter import export as run_export
 from src.test_pagination import test_pagination as run_test_pagination
 from src.clean_manifest_errors import clean_manifest_errors as run_clean_manifest_errors
 from src.anno_to_digit import anno_to_digit as run_anno_to_digit
+
+def validator(ctx, param, value):
+    if not URL_ROOT_REGEX.match(value):
+        raise click.BadParameter(fr"parameter '{param.name}' must be of form 'scheme://host' (i.e.: http://host.example.com) and match regex: {URL_ROOT_REGEX.pattern}")
+    return value
 
 @click.group()
 def cli():
@@ -24,6 +31,7 @@ def cli():
 @click.option(
     "-a", "--alt-url-root",
     type=click.STRING,
+    callback=validator,
     help="alternative root URL of manifests in case it has changed (i.e., 'http://iiif.example1.com' -> 'http://iiif.example2.com')"
 )
 def export(strategy: Literal["search-api", "canvas"], alt_url_root: str):

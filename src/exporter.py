@@ -1,8 +1,11 @@
+import copy
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Tuple, Literal
 
+import aiohttp
 from tqdm.asyncio import tqdm_asyncio
+from yarl import URL
 
 from .utils import (
     SAS_ENDPOINT,
@@ -11,10 +14,11 @@ from .utils import (
     ANNOTATIONS_DIR,
     SAVE_ERR_FILE,
     MAX_CONNECTIONS,
-    json_parse,
+    ANNOTATION_LIST_TEMPLATE,
+    URL_ROOT_REGEX,
     json_read_if_exists,
     json_write,
-    fetch_to_dict,
+    fetch_to_json,
     make_session
 )
 from .logger import logger
@@ -56,7 +60,7 @@ class SasExporter():
     ):
         if strategy not in ["search-api", "canvas"]:
             raise ValueError(f"SasExporter: expected one of ['search-api', 'canvas'] for argument 'strategy', got '{strategy}'")
-        if alt_url_root is not None and not isinstance(alt_url_root, "str"):
+        if alt_url_root is not None and not isinstance(alt_url_root, str):
             raise ValueError(f"SasExporter: argument 'alt_url_root' can be a string or None, got '{alt_url_root}'")
 
         self.strategy = strategy
@@ -68,13 +72,17 @@ class SasExporter():
         self.save_ok_file = SAVE_OK_FILE
         self.max_connections = MAX_CONNECTIONS
         # mapping of { <manifest_uri>: <path to downloaded annotation list>? }
-        self.save_data, exists = json_read_if_exists(self.save_ok_file)
+        self.save_data_previous, exists = json_read_if_exists(self.save_ok_file)
+        # save_data for the curent iteration of the pipeline
+        self.save_data = {}
         # NOTE: we overwrite contents of SAVE_ERR_FILE from 1 run to another: we retry a download on every failed annotation list extraction.
         self.save_err_file = SAVE_ERR_FILE
         # list of manifests to download
         self.manifests: List[str] = []
-        # aiohttp session
-        self.make_session = lambda: make_session(self.max_connections)
+
+        # HTTP client session
+        # defined in __aenter__ / closed in `__aexit__`
+        self._session: aiohttp.ClientSession | None = None
 
         logger.info(f"Initiated SasExporter successfully (strategy={strategy}, alt_url_root={alt_url_root}).")
         if exists:
@@ -82,6 +90,25 @@ class SasExporter():
         else:
             logger.info(f"No pre-fetched manifests to load. Everything will be exported.")
         return
+
+    # NOTE: defining __aenter__ / __aexit__ turns SasExporter into an async content manager.
+    # the advantage is that we can define 1 async context for the whole pipeline, thus
+    # sharing the same aiohttp.ClientSession for the whole pipeline, avoiding leaks and
+    # actually controlling the maximum number of parrallel queries run at once.
+    async def __aenter__(self) -> "SasExporter":
+        self._session = make_session(self.max_connections)
+        return self
+
+    async def __aexit__(self, *args) -> None:
+        if self._session:
+            await self._session.close()
+            self._session = None
+
+    @property
+    def session(self) -> aiohttp.ClientSession:
+        if self._session is None:
+            raise RuntimeError("SasExporter must be used as an async context manager")
+        return self._session
 
     @property
     def endpoint_manifests(self) -> str:
@@ -105,19 +132,25 @@ class SasExporter():
         json_write(save_err_data, self.save_err_file)
         return self
 
-    def split_save_data(self) -> Tuple[Dict, List]:
+    def prepare_save_data(self) -> Tuple[Dict, List]:
         save_ok_data = {}
         save_err_data = []
+        # split save_data in 2: manifests that are ok, and those with errors.
         for manifest_uri, path in self.save_data.items():
             if path is not None:
                 save_ok_data[manifest_uri] = path
             else:
                 save_err_data.append(manifest_uri)
+
+        # concatenate save_sata with self.saver_data_previous (data extracted at the previous iteration)
+        for manifest_uri, path in self.save_data_previous.items():
+            if manifest_uri not in save_ok_data.keys():
+                save_ok_data[manifest_uri] = path
+
         return save_ok_data, save_err_data
 
-    async def fetch_to_dict(self, url: str, params: Dict = {}) -> Dict:
-        async with self.make_session() as session:
-            return await fetch_to_dict(session, url, params)
+    async def fetch_to_json(self, url: str, params: Dict = {}) -> Dict|List:
+        return await fetch_to_json(self.session, url, params)
 
     async def fetch_annotation_list_paginated(self, url: str) -> Dict:
         """
@@ -131,7 +164,7 @@ class SasExporter():
         annotation_list_full = None
         annotations = []
         while next_page:
-            annotation_list = await self.fetch_to_dict(next_page)
+            annotation_list = await self.fetch_to_json(next_page)
             # base structure of the output annotation list. set at 1st iteration of while.
             if annotation_list_full is None:
                 annotation_list_full = annotation_list
@@ -150,37 +183,60 @@ class SasExporter():
         return await self.fetch_annotation_list_paginated(search_api_endpoint)
 
     async def fetch_annotations_for_canvas(self, canvas_id: str) -> List[Dict]:
-        url = f"{self.endpoint}/annotation/search"
-        r = await self.fetch_to_dict(url, { "uri": canvas_id })
-        print(r)
-        return [{}]
+        # TODO handle alt_url_root
+        # TODO witXX_manXX_annoXX has been changed to witXX_manXX so now there are TONS of fetch errors
+        #   when fetching with canvas URIs BUT is works fine when fetching with /search-api/
+        #   and i suspect that querying search_api with witXX_manXX will actually cause data loss.
+
+        fetch = lambda x: self.fetch_to_json(f"{self.endpoint}/annotation/search", { "uri": x })
+
+        r_url_og = await fetch(canvas_id)   # pyright: ignore
+        if self.alt_url_root is not None and len(self.alt_url_root):
+            canvas_id_rewrite = URL_ROOT_REGEX.sub(self.alt_url_root, canvas_id)
+            r_url_rewrite = await fetch(canvas_id_rewrite)
+            return [ *r_url_og, *r_url_rewrite ]
+        else:
+            return r_url_og  # pyright: ignore
 
     async def fetch_annotations_with_search_canvas(self, manifest_uri: str):
-        # NOTE the function requires that the manifest_uri can be dereferenced
-        manifest = await self.fetch_to_dict(manifest_uri)
+        # NOTE 1. the function requires that the manifest_uri can be dereferenced
+        # NOTE 2. if there's a parsing error, the manifest wasn't found => this function will exit: no manifest can be extracted.
+        manifest = await self.fetch_to_json(manifest_uri)
         # 1. build a list of all canvas IDs to query
         canvas_uri_set = set(
             canvas["@id"]
             for canvas in manifest["sequences"][0]["canvases"]
         )
         # 2. query all canvas IDs, handling alt_url_root if necessary
-        for canvas_id in canvas_uri_set:
-            await self.fetch_annotations_with_search_canvas(canvas_id)
-
+        tasks = [
+            self.fetch_annotations_for_canvas(canvas_id)
+            for canvas_id in canvas_uri_set
+        ]
+        # 3. concatenate results in an annotation list.
+        # list of list of annotations
+        results: List[List[Dict]] = await asyncio.gather(*tasks)
+        # list of asnnotations
+        annotation_array: List[Dict] = [
+            _r for r in results for _r in r
+        ]
+        annotation_list = copy.deepcopy(ANNOTATION_LIST_TEMPLATE)
+        annotation_list["@id"] = manifest_uri_to_short_id(manifest_uri)
+        annotation_list["resources"] = annotation_array
+        return annotation_list
 
     async def fetch_manifests(self) -> "SasExporter":
         manifests = []
-        collection = await self.fetch_to_dict(self.endpoint_manifests)
+        collection = await self.fetch_to_json(self.endpoint_manifests)
         manifests = iiif_collection_to_manifest_uri_list(collection)
         json_write(manifests, self.out_dir / "manifests_collection.json")
         self.manifests = manifests
         return self
 
-    async def fetch_annotations_from_manifest_uri(self, manifest_uri: str) -> Tuple[str, str|None]:
+    async def fetch_annotations_from_manifest_uri(self, manifest_uri: str) -> "SasExporter":
         """
         pipeline to download a single annotation_list
 
-        :returns:
+        finishes by appending to `self.save_data` a dict on the extracted annotations:
             - if the download succeeds: (<manifest_uri, path_to_downloaded_annotation_list>)
             - if the download fails: (<manifest_uri>, None)
         """
@@ -193,43 +249,45 @@ class SasExporter():
             else:
                 data = await self.fetch_annotations_with_search_canvas(manifest_uri) or {}
             self.write_annotation_list(data, out_path)
-            return manifest_uri, str(out_path)
+            self.save_data[manifest_uri] = str(out_path)
 
         except Exception as e:
             logger.error(f"Failed to fetch annotations for manifest {manifest_uri}: {e}")
-            return manifest_uri, None
+            self.save_data[manifest_uri] = None
+        return self
 
     async def fetch_annotations(self) -> "SasExporter":
         manifests_to_download = [
-            m for m in self.manifests if m not in self.save_data.keys()
+            m for m in self.manifests if m not in self.save_data_previous.keys()
         ]
         tasks = [
             self.fetch_annotations_from_manifest_uri(m_uri)
             for m_uri in manifests_to_download
         ]
-        results = await tqdm_asyncio.gather(
+        await tqdm_asyncio.gather(
             *tasks,
             total=len(manifests_to_download),
             desc=f"Downloading annotation lists"
         )
-        self.save_data = { m_uri: path for m_uri, path in results }
         return self
 
     async def pipeline_async(self) -> "SasExporter":
-        logger.info(f"Exporting data from '{SAS_ENDPOINT}'")
-        logger.info("Fetching all indexed manifests.")
-        await self.fetch_manifests()
-        logger.info(f"Found {len(self.manifests)} manifests for which to extract annotations.")
-        logger.info(f"Fetching annotations for {len(self.manifests)} manifests.")
-        await self.fetch_annotations()
-        logger.info(f"Finished fetching annotations.")
+        # this wraps the pipeline in an async context manager, with a sincle client session.
+        async with self:
+            logger.info(f"Exporting data from '{SAS_ENDPOINT}'")
+            logger.info("Fetching all indexed manifests.")
+            await self.fetch_manifests()
+            logger.info(f"Found {len(self.manifests)} manifests for which to extract annotations.")
+            logger.info(f"Fetching annotations for {len(self.manifests)} manifests.")
+            await self.fetch_annotations()
+            logger.info(f"Finished fetching annotations.")
         return self
 
     def pipeline(self) -> "SasExporter":
         try:
             asyncio.run(self.pipeline_async())
         finally:
-            save_ok_data, save_err_data = self.split_save_data()
+            save_ok_data, save_err_data = self.prepare_save_data()
             logger.info(f"Exporting data (success: {len(save_ok_data.keys())}, error: {len(save_err_data)}).")
             self.write_save_data(save_ok_data, save_err_data)
         return self
@@ -238,3 +296,7 @@ def export(stategy: Literal["search-api", "canvas"], alt_url_root: str|None):
     logger.info(f"RUNNING   : {STEP_NAME}")
     SasExporter(stategy, alt_url_root).pipeline()
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
+
+"Y" "https://vhs.huma-num.fr/vhs/iiif/v2/wit497_pdf497/manifest.json"
+"N" "https://vhs.huma-num.fr/vhs/iiif/v2/wit497_pdf497_anno497/manifest.json"
+"Y" "https://vhs.huma-num.fr/vhs/iiif/v2/wit568_pdf568_anno568/manifest.json"
