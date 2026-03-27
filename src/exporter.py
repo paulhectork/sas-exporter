@@ -183,11 +183,9 @@ class SasExporter():
         return await self.fetch_annotation_list_paginated(search_api_endpoint)
 
     async def fetch_annotations_for_canvas(self, canvas_id: str) -> List[Dict]:
-        # TODO handle alt_url_root
         # TODO witXX_manXX_annoXX has been changed to witXX_manXX so now there are TONS of fetch errors
         #   when fetching with canvas URIs BUT is works fine when fetching with /search-api/
         #   and i suspect that querying search_api with witXX_manXX will actually cause data loss.
-
         fetch = lambda x: self.fetch_to_json(f"{self.endpoint}/annotation/search", { "uri": x })
 
         r_url_og = await fetch(canvas_id)   # pyright: ignore
