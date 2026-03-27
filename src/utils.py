@@ -84,11 +84,11 @@ def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
         connector=aiohttp.TCPConnector(limit=max_connections)
     )
 
-async def fetch_to_dict(session: aiohttp.ClientSession, url: str) -> Dict:
+async def fetch_to_dict(session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict:
     """
     must be run in an `async with aiohttp.ClientSession(...) as session` block:
     """
-    async with session.get(url) as response:
+    async with session.get(url, params=params) as response:
         r_text = await response.text()
         return json_parse(r_text)
 

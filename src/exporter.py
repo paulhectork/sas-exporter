@@ -11,7 +11,7 @@ from .utils import (
     ANNOTATIONS_DIR,
     SAVE_ERR_FILE,
     MAX_CONNECTIONS,
-    EXPORTER_STRATEGY_VALUES,
+    json_parse,
     json_read_if_exists,
     json_write,
     fetch_to_dict,
@@ -115,9 +115,9 @@ class SasExporter():
                 save_err_data.append(manifest_uri)
         return save_ok_data, save_err_data
 
-    async def fetch_to_dict(self, url: str) -> Dict:
+    async def fetch_to_dict(self, url: str, params: Dict = {}) -> Dict:
         async with self.make_session() as session:
-            return await fetch_to_dict(session, url)
+            return await fetch_to_dict(session, url, params)
 
     async def fetch_annotation_list_paginated(self, url: str) -> Dict:
         """
@@ -145,6 +145,29 @@ class SasExporter():
             del annotation_list_full["next"]  # pyright: ignore
         return annotation_list_full  # pyright: ignore
 
+    async def fetch_annotations_with_search_api(self, manifest_short_id: str):
+        search_api_endpoint = self.endpoint_annotations(manifest_short_id)
+        return await self.fetch_annotation_list_paginated(search_api_endpoint)
+
+    async def fetch_annotations_for_canvas(self, canvas_id: str) -> List[Dict]:
+        url = f"{self.endpoint}/annotation/search"
+        r = await self.fetch_to_dict(url, { "uri": canvas_id })
+        print(r)
+        return [{}]
+
+    async def fetch_annotations_with_search_canvas(self, manifest_uri: str):
+        # NOTE the function requires that the manifest_uri can be dereferenced
+        manifest = await self.fetch_to_dict(manifest_uri)
+        # 1. build a list of all canvas IDs to query
+        canvas_uri_set = set(
+            canvas["@id"]
+            for canvas in manifest["sequences"][0]["canvases"]
+        )
+        # 2. query all canvas IDs, handling alt_url_root if necessary
+        for canvas_id in canvas_uri_set:
+            await self.fetch_annotations_with_search_canvas(canvas_id)
+
+
     async def fetch_manifests(self) -> "SasExporter":
         manifests = []
         collection = await self.fetch_to_dict(self.endpoint_manifests)
@@ -162,12 +185,16 @@ class SasExporter():
             - if the download fails: (<manifest_uri>, None)
         """
         manifest_short_id = manifest_uri_to_short_id(manifest_uri)
-        search_api_endpoint = self.endpoint_annotations(manifest_short_id)
         out_path = self.annotation_list_path(manifest_short_id)
+
         try:
-            data = await self.fetch_annotation_list_paginated(search_api_endpoint)
+            if self.strategy == "search-api":
+                data = await self.fetch_annotations_with_search_api(manifest_short_id)
+            else:
+                data = await self.fetch_annotations_with_search_canvas(manifest_uri) or {}
             self.write_annotation_list(data, out_path)
             return manifest_uri, str(out_path)
+
         except Exception as e:
             logger.error(f"Failed to fetch annotations for manifest {manifest_uri}: {e}")
             return manifest_uri, None

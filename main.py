@@ -62,7 +62,9 @@ def clean_manifest_error():
     build a list of AnnoLists with fetchable manifests
 
     validate exported AnnotationLists by ensuring their target manifest(s)
-    can be fetched. save paths to valid AnnotationLists to a file
+    can be fetched. save paths to valid AnnotationLists to a file.
+
+    NOTE that this step is useless if the export was made with --strategy="canvas".
     """
     run_clean_manifest_errors()
 
