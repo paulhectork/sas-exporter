@@ -13,4 +13,5 @@ wheels/
 .env
 log/*
 out/*
+out*/*
 !out/_save.json

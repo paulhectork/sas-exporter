@@ -1,4 +1,4 @@
-import textwrap
+from typing import Literal
 
 import click
 from dotenv import load_dotenv
@@ -17,16 +17,16 @@ def cli():
 @cli.command()
 @click.option(
     "-s", "--strategy",
-    default="search-api",
     type=click.Choice(["search-api", "canvas"]),
+    default="search-api",
     help="which SAS url to fetch annotations with"
 )
 @click.option(
     "-a", "--alt-url-root",
     type=click.STRING,
-    help="alternative root URL of manifests in case it has changed (i.e., 'iiif.example1.com' -> 'iiif.example2.com')"
+    help="alternative root URL of manifests in case it has changed (i.e., 'http://iiif.example1.com' -> 'http://iiif.example2.com')"
 )
-def export(strategy: str, alt_url_root: str):
+def export(strategy: Literal["search-api", "canvas"], alt_url_root: str):
     """
     export all annotations from an SAS endpoint
 
@@ -44,8 +44,7 @@ def export(strategy: str, alt_url_root: str):
     if defining an "--alt-url-root" in conjunction with "canvas" strategy, for each canvas, query using both URLs.
     this takes even more time but ensures a maximal number of orphaned annotations are retrieved.
     """
-    print(strategy, alt_url_root)
-    run_export()
+    run_export(strategy, alt_url_root)
 
 @cli.command()
 def test_pagination():

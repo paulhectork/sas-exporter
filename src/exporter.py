@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Literal
 
 from tqdm.asyncio import tqdm_asyncio
 
@@ -11,6 +11,7 @@ from .utils import (
     ANNOTATIONS_DIR,
     SAVE_ERR_FILE,
     MAX_CONNECTIONS,
+    EXPORTER_STRATEGY_VALUES,
     json_read_if_exists,
     json_write,
     fetch_to_dict,
@@ -48,7 +49,19 @@ def fix_next_page_url(url: str|None) -> str|None:
 
 class SasExporter():
     save_ok_file: Path
-    def __init__(self):
+    def __init__(
+        self,
+        strategy: Literal["search-api", "canvas"]="search-api",
+        alt_url_root: str|None = None
+    ):
+        if strategy not in ["search-api", "canvas"]:
+            raise ValueError(f"SasExporter: expected one of ['search-api', 'canvas'] for argument 'strategy', got '{strategy}'")
+        if alt_url_root is not None and not isinstance(alt_url_root, "str"):
+            raise ValueError(f"SasExporter: argument 'alt_url_root' can be a string or None, got '{alt_url_root}'")
+
+        self.strategy = strategy
+        self.alt_url_root = alt_url_root
+
         self.endpoint = SAS_ENDPOINT
         self.annotations_dir = ANNOTATIONS_DIR
         self.out_dir = OUT_DIR
@@ -63,7 +76,7 @@ class SasExporter():
         # aiohttp session
         self.make_session = lambda: make_session(self.max_connections)
 
-        logger.info(f"Initiated SasExporter successfully.")
+        logger.info(f"Initiated SasExporter successfully (strategy={strategy}, alt_url_root={alt_url_root}).")
         if exists:
             logger.info(f"Skipping {len(list(self.save_data.keys()))} pre-fetched manifests")
         else:
@@ -194,7 +207,7 @@ class SasExporter():
             self.write_save_data(save_ok_data, save_err_data)
         return self
 
-def export():
+def export(stategy: Literal["search-api", "canvas"], alt_url_root: str|None):
     logger.info(f"RUNNING   : {STEP_NAME}")
-    SasExporter().pipeline()
+    SasExporter(stategy, alt_url_root).pipeline()
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
