@@ -22,7 +22,7 @@ def export():
     export all annotations from an SAS endpoint
 
     if the endpoint of your IIIF Manifest provider has changed and those changes
-    have not been reflected in your SAS, use the EXPORT_STRATEGY and IIIF_SCHEME_REPL
+    have not been reflected in your SAS, use the EXPORT_STRATEGY and IIIF_HOST_REPL
     env variables (and see their doc in .env.template).
     """
     run_export()

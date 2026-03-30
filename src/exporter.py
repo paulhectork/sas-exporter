@@ -1,3 +1,4 @@
+import os
 import copy
 import asyncio
 from pathlib import Path
@@ -52,18 +53,21 @@ def fix_next_page_url(url: str|None) -> str|None:
 
 class SasExporter():
     save_ok_file: Path
-    def __init__(
-        self,
-        strategy: Literal["search-api", "canvas"]="search-api",
-        alt_url_root: str|None = None
-    ):
+    def __init__(self):
+        # get and validate env variables
+        strategy = os.getenv("EXPORT_STRATEGY")
         if strategy not in ["search-api", "canvas"]:
-            raise ValueError(f"SasExporter: expected one of ['search-api', 'canvas'] for argument 'strategy', got '{strategy}'")
-        if alt_url_root is not None and not isinstance(alt_url_root, str):
-            raise ValueError(f"SasExporter: argument 'alt_url_root' can be a string or None, got '{alt_url_root}'")
+            raise ValueError(f"SasExporter: env variable EXPORT_STRATEGY expected one of ['search-api', 'canvas'], got '{strategy}'")
+
+        iiif_host_repl = os.getenv("IIIF_HOST_REPL")
+        if iiif_host_repl is not None:
+            iiif_host_repl = iiif_host_repl.split(",")
+            if not len(iiif_host_repl) == 2:
+                raise ValueError(f"SasExporter: env variable 'IIIF_HOST_REPL' must be 'old-host,new-host' (i.e., 'old.example.org,new.example.org'), got '{iiif_host_repl}'")
+            iiif_host_repl = (iiif_host_repl[0], iiif_host_repl[1])  # ( old_host, new_host )
 
         self.strategy = strategy
-        self.alt_url_root = alt_url_root
+        self.iiif_host_repl: None|Tuple[str,str] = iiif_host_repl
 
         self.endpoint = SAS_ENDPOINT
         self.annotations_dir = ANNOTATIONS_DIR
@@ -83,7 +87,7 @@ class SasExporter():
         # defined in __aenter__ / closed in `__aexit__`
         self._session: aiohttp.ClientSession | None = None
 
-        logger.info(f"Initiated SasExporter successfully (strategy={strategy}, alt_url_root={alt_url_root}).")
+        logger.info(f"Initiated SasExporter successfully (strategy={strategy}, iiif_host_repl={iiif_host_repl}).")
         if exists:
             logger.info(f"Skipping {len(list(self.save_data.keys()))} pre-fetched manifests")
         else:
@@ -186,19 +190,22 @@ class SasExporter():
         #   when fetching with canvas URIs BUT is works fine when fetching with /search-api/
         #   and i suspect that querying search_api with witXX_manXX will actually cause data loss.
         fetch = lambda x: self.fetch_to_json(f"{self.endpoint}/annotation/search", { "uri": x })
-
-        if self.alt_url_root is not None and len(self.alt_url_root):
-            canvas_id = URL_ROOT_REGEX.sub(self.alt_url_root, canvas_id)
         return await fetch(canvas_id)  # pyright: ignore
 
 
     async def fetch_annotations_with_search_canvas(self, manifest_uri: str):
-        # NOTE 1. the function requires that the manifest_uri can be dereferenced
-        # NOTE 2. if there's a parsing error, the manifest wasn't found => this function will exit: no manifest can be extracted.
-        if (
-            self.alt_url_root is not None
-            and len(self.alt_url_root)
-        ): ...
+        # NOTE: about self.iiif_host_repl:
+        # in the case where:
+        # - the IIIF manifest provider has changed its host (old.example.com has become new.example.com)
+        # - BUT those changes have not been reflected in SAS (manifests are still indexed using old.example.com)
+        # do:
+        # 1. fetch manifest using new IIIF host
+        # 2. build an index of canvases with the old IIIF host: the route /annotation/search will still use the old IIIF root,
+        #      since IIIF annotation targets have not been updated.
+
+        # replace old IIIF host (indexed in SAS but NOT accessible on our IIIF server) by new IIIF host.
+        if self.iiif_host_repl is not None:
+            manifest_uri = manifest_uri.replace(self.iiif_host_repl[0], self.iiif_host_repl[1])
 
         manifest = await self.fetch_to_json(manifest_uri)
         # 1. build a list of all canvas IDs to query
@@ -206,7 +213,13 @@ class SasExporter():
             canvas["@id"]
             for canvas in manifest["sequences"][0]["canvases"]
         )
-        # 2. query all canvas IDs, handling alt_url_root if necessary
+        # 2. convert host of canvas URIs back to the old host: it is the old host that is indexed in SAS.
+        if self.iiif_host_repl is not None:
+            canvas_uri_set = set(
+                canvas_uri.replace(self.iiif_host_repl[1], self.iiif_host_repl[0])
+                for canvas_uri in canvas_uri_set
+            )
+        # 3. query all canvas IDs, handling alt_url_root if necessary
         tasks = [
             self.fetch_annotations_for_canvas(canvas_id)
             for canvas_id in canvas_uri_set
@@ -291,7 +304,7 @@ class SasExporter():
             self.write_save_data(save_ok_data, save_err_data)
         return self
 
-def export(stategy: Literal["search-api", "canvas"], alt_url_root: str|None):
+def export():
     logger.info(f"RUNNING   : {STEP_NAME}")
-    SasExporter(stategy, alt_url_root).pipeline()
+    SasExporter().pipeline()
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
