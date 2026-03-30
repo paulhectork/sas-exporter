@@ -111,7 +111,26 @@ async def fetch_to_json(session: aiohttp.ClientSession, url: str, params: Dict =
         r_text = await response.text()
     return json_parse(r_text)
 
-URL_ROOT_REGEX = re.compile(r"^https?:\/\/[^\/]+,https?:\/\/[^\/]+")
+strategy = os.getenv("EXPORT_STRATEGY")
+if strategy not in ["search-api", "canvas"]:
+    raise ValueError(f"env variable EXPORT_STRATEGY expected one of ['search-api', 'canvas'], got '{strategy}'")
+EXPORT_STRATEGY = strategy
+
+iiif_host_repl = os.getenv("IIIF_HOST_REPL")
+if iiif_host_repl is not None:
+    iiif_host_repl = iiif_host_repl.split(",")
+    if not len(iiif_host_repl) == 2:
+        raise ValueError(f"SasExporter: env variable 'IIIF_HOST_REPL' must be 'old-host,new-host' (i.e., 'old.example.org,new.example.org'), got '{iiif_host_repl}'")
+    iiif_host_repl = (iiif_host_repl[0], iiif_host_repl[1])  # ( old_host, new_host )
+IIIF_HOST_REPL = iiif_host_repl
+
+timeout = os.getenv("TIMEOUT", 30)
+if timeout:
+    try:
+        timeout = float(timeout)
+    except Exception as e:
+        raise ValueError(f"Cannot retype env variable TIMEOUT to float: '{timeout}'")
+TIMEOUT = timeout
 
 SRC_DIR = Path(__file__).parent.resolve()
 ROOT_DIR = SRC_DIR.parent.resolve()

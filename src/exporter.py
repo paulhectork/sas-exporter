@@ -18,6 +18,9 @@ from .utils import (
     SAVE_ERR_FILE,
     MAX_CONNECTIONS,
     ANNOTATION_LIST_TEMPLATE,
+    IIIF_HOST_REPL,
+    TIMEOUT,
+    EXPORT_STRATEGY,
     json_dumps,
     json_read_if_exists,
     json_write,
@@ -50,16 +53,6 @@ class SasExporter():
     save_ok_file: Path
     def __init__(self, retry: str|None):
         # get and validate env variables
-        strategy = os.getenv("EXPORT_STRATEGY")
-        if strategy not in ["search-api", "canvas"]:
-            raise ValueError(f"SasExporter: env variable EXPORT_STRATEGY expected one of ['search-api', 'canvas'], got '{strategy}'")
-
-        iiif_host_repl = os.getenv("IIIF_HOST_REPL")
-        if iiif_host_repl is not None:
-            iiif_host_repl = iiif_host_repl.split(",")
-            if not len(iiif_host_repl) == 2:
-                raise ValueError(f"SasExporter: env variable 'IIIF_HOST_REPL' must be 'old-host,new-host' (i.e., 'old.example.org,new.example.org'), got '{iiif_host_repl}'")
-            iiif_host_repl = (iiif_host_repl[0], iiif_host_repl[1])  # ( old_host, new_host )
 
         # get and validate retry
         # if retry is specified, fetch previous errors and select only the
@@ -74,7 +67,7 @@ class SasExporter():
             if re.match(r"^http:\d{3}$", retry):
                 retry, http_status = retry.split(":")
                 retry_filter = {
-                    "error_type": retry_mapper["retry"],
+                    "error_type": retry_mapper[retry],
                     "http_status": int(http_status)
                 }
             else:
@@ -82,10 +75,10 @@ class SasExporter():
         else:
             retry_filter = None
 
-
-        self.strategy = strategy
-        self.iiif_host_repl: None|Tuple[str,str] = iiif_host_repl
         self.retry_filter = retry_filter
+        self.strategy = EXPORT_STRATEGY
+        self.iiif_host_repl: None|Tuple[str,str] = IIIF_HOST_REPL
+        self.timeout = TIMEOUT
 
         self.endpoint = SAS_ENDPOINT
         self.annotations_dir = ANNOTATIONS_DIR
@@ -111,7 +104,7 @@ class SasExporter():
         # defined in __aenter__ / closed in `__aexit__`
         self._session: aiohttp.ClientSession | None = None
 
-        logger.info(f"Initiated SasExporter successfully (strategy={strategy}, iiif_host_repl={iiif_host_repl}, max_connections={self.max_connections}).")
+        logger.info(f"Initiated SasExporter successfully (strategy={self.strategy}, iiif_host_repl={self.iiif_host_repl}, max_connections={self.max_connections}).")
         if exists:
             logger.info(f"Skipping {len(list(self.save_ok_previous.keys()))} pre-fetched manifests")
         else:
@@ -234,14 +227,11 @@ class SasExporter():
 
         manifest = await self.fetch_to_json(manifest_uri)
         # 1. build a list of all canvas IDs to query
-        try:
-            canvas_uri_list = list(set(
-                canvas["@id"]
-                for canvas in manifest["sequences"][0]["canvases"]
-            ))
-        except KeyError as e:
-            print(json_dumps(manifest))
-            raise e
+        # NOTE: in some cases, this will raise a KeyError: in AIKON, a JSON is returned, but with the structure { "response": "...", "reason": "..." }
+        canvas_uri_list = list(set(
+            canvas["@id"]
+            for canvas in manifest["sequences"][0]["canvases"]
+        ))
 
         # 2. convert host of canvas URIs back to the old host: it is the old host that is indexed in SAS.
         if self.iiif_host_repl is not None:
@@ -324,7 +314,7 @@ class SasExporter():
                 m for m in self.manifests
                 if m not in self.save_ok_previous.keys()
             ]
-        # expand retry_filter to select only certain failed manifests
+        # expand retry_filter to re-export only certain failed manifests
         else:
             # if 'all', redownload all failures
             if self.retry_filter["error_type"] == "all":
@@ -353,7 +343,6 @@ class SasExporter():
                 ]
 
         logger.info(f"Fetching annotations for {len(manifests_to_download)} manifests.")
-
         tasks = [
             self.fetch_annotations_from_manifest_uri(m_uri)
             for m_uri in manifests_to_download
