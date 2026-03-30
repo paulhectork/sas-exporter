@@ -73,19 +73,19 @@ class SasExporter():
             }
             if re.match(r"^http:\d{3}$", retry):
                 retry, http_status = retry.split(":")
-                retry_data = {
+                retry_filter = {
                     "error_type": retry_mapper["retry"],
                     "http_status": int(http_status)
                 }
             else:
-                retry_data = { "error_type": retry_mapper[retry] }
+                retry_filter = { "error_type": retry_mapper[retry] }
         else:
-            retry_data = None
+            retry_filter = None
 
 
         self.strategy = strategy
         self.iiif_host_repl: None|Tuple[str,str] = iiif_host_repl
-        self.retry_data = retry_data
+        self.retry_filter = retry_filter
 
         self.endpoint = SAS_ENDPOINT
         self.annotations_dir = ANNOTATIONS_DIR
@@ -96,7 +96,7 @@ class SasExporter():
         self.save_ok_previous, exists = json_read_if_exists(self.save_ok_file)
 
         # NOTE: we overwrite contents of SAVE_ERR_FILE from 1 run to another:
-        # if retry_data is None, we retry a download on every failed annotation list extraction.
+        # if retry_filter is None, we retry a download on every failed annotation list extraction.
         # otherwise, we retry a download only on specific errors.
         self.save_err_file = SAVE_ERR_FILE
         # errors at the previous iteration
@@ -319,12 +319,41 @@ class SasExporter():
 
     async def fetch_annotations(self) -> "SasExporter":
         # skip successfully downloaded manifests
-        if not self.retry_data:
+        if not self.retry_filter:
             manifests_to_download = [
-                m for m in self.manifests if m not in self.save_ok_previous.keys()
+                m for m in self.manifests
+                if m not in self.save_ok_previous.keys()
             ]
+        # expand retry_filter to select only certain failed manifests
         else:
-            ...
+            # if 'all', redownload all failures
+            if self.retry_filter["error_type"] == "all":
+                manifests_to_download = [
+                    m for m in self.manifests
+                    if m in self.save_err_previous.keys()
+                ]
+            # filter for a specific http status
+            elif "http_status" in self.retry_filter.keys():
+                manifests_to_download = []
+                for err_m, err_obj in self.save_err_previous.items():
+                    if (
+                        err_m in self.manifests
+                        and "http_status" in err_obj.keys()
+                        and int(err_obj["http_status"]) == int(self.retry_filter["http_status"])
+                    ):
+                        manifests_to_download.append(err_m)
+            # otherwise, self.retry_filter["error_type"] contains a value
+            # of the "error_type" key in save_err_previous.values()
+            else:
+                manifests_to_download = [
+                    m
+                    for m in self.manifests
+                    if m in self.save_err_previous.keys()
+                    and self.save_err_previous[m]["error_type"] == self.retry_filter["error_type"]
+                ]
+
+        logger.info(f"Fetching annotations for {len(manifests_to_download)} manifests.")
+
         tasks = [
             self.fetch_annotations_from_manifest_uri(m_uri)
             for m_uri in manifests_to_download
@@ -343,7 +372,6 @@ class SasExporter():
             logger.info("Fetching all indexed manifests.")
             await self.fetch_manifests()
             logger.info(f"Found {len(self.manifests)} manifests for which to extract annotations.")
-            logger.info(f"Fetching annotations for {len(self.manifests)} manifests.")
             await self.fetch_annotations()
             logger.info(f"Finished fetching annotations.")
         return self
