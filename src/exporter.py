@@ -157,7 +157,9 @@ class SasExporter():
 
     async def fetch_annotation_list_paginated(self, url: str) -> Dict:
         """
-        fetch all paginated annotations for a manifest and return them as a single IIIF AnnotationList.
+        fetch all paginated annotations for a manifest using the /search-api/
+        and return them as a single IIIF AnnotationList.
+
         - fetch the base AnnotationList (1st page of results)
         - fetch all extra pages (URLs defined in "next" key of an annotation list)
         - concatenate all annotations within a single list
@@ -186,43 +188,45 @@ class SasExporter():
         return await self.fetch_annotation_list_paginated(search_api_endpoint)
 
     async def fetch_annotations_for_canvas(self, canvas_id: str) -> List[Dict]:
-        # TODO witXX_manXX_annoXX has been changed to witXX_manXX so now there are TONS of fetch errors
-        #   when fetching with canvas URIs BUT is works fine when fetching with /search-api/
-        #   and i suspect that querying search_api with witXX_manXX will actually cause data loss.
-        fetch = lambda x: self.fetch_to_json(f"{self.endpoint}/annotation/search", { "uri": x })
-        return await fetch(canvas_id)  # pyright: ignore
-
+        return await self.fetch_to_json(f"{self.endpoint}/annotation/search", { "uri": canvas_id })  # pyright: ignore
 
     async def fetch_annotations_with_search_canvas(self, manifest_uri: str):
-        # NOTE: about self.iiif_host_repl:
-        # in the case where:
-        # - the IIIF manifest provider has changed its host (old.example.com has become new.example.com)
-        # - BUT those changes have not been reflected in SAS (manifests are still indexed using old.example.com)
-        # do:
-        # 1. fetch manifest using new IIIF host
-        # 2. build an index of canvases with the old IIIF host: the route /annotation/search will still use the old IIIF root,
-        #      since IIIF annotation targets have not been updated.
+        """
+        fetch all annotations for a manifest using the /annotation/search route
+        and return all concatenated annotations in an AnnotationList
 
+        NOTE: about self.iiif_host_repl:
+        in the case where:
+        - the IIIF manifest provider has changed its host (old.example.com has become new.example.com)
+        - BUT those changes have not been reflected in SAS (manifests are still indexed using old.example.com)
+        do:
+        1. fetch manifest using new IIIF host
+        2. build an index of canvases with the old IIIF host: the route /annotation/search will still use the old IIIF root,
+             since IIIF annotation targets have not been updated.
+        """
         # replace old IIIF host (indexed in SAS but NOT accessible on our IIIF server) by new IIIF host.
         if self.iiif_host_repl is not None:
             manifest_uri = manifest_uri.replace(self.iiif_host_repl[0], self.iiif_host_repl[1])
 
         manifest = await self.fetch_to_json(manifest_uri)
         # 1. build a list of all canvas IDs to query
-        canvas_uri_set = set(
+        canvas_uri_list = list(set(
             canvas["@id"]
             for canvas in manifest["sequences"][0]["canvases"]
-        )
+        ))
         # 2. convert host of canvas URIs back to the old host: it is the old host that is indexed in SAS.
         if self.iiif_host_repl is not None:
-            canvas_uri_set = set(
+            canvas_uri_list = [
                 canvas_uri.replace(self.iiif_host_repl[1], self.iiif_host_repl[0])
-                for canvas_uri in canvas_uri_set
-            )
+                for canvas_uri in canvas_uri_list
+            ]
+        logger.info(f"@@@ FETCH FOR MANIFEST   : {manifest_uri}")
+        logger.info(f"@@@ N CANVASES           : {len(canvas_uri_list)}")
+        logger.info(f"@@@ CANVAS_URI_SET SAMPLE: {canvas_uri_list[:min(len(canvas_uri_list), 3)]}")
         # 3. query all canvas IDs, handling alt_url_root if necessary
         tasks = [
             self.fetch_annotations_for_canvas(canvas_id)
-            for canvas_id in canvas_uri_set
+            for canvas_id in canvas_uri_list
         ]
         # 3. concatenate results in an annotation list.
         # list of list of annotations
