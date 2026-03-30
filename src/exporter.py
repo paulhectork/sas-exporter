@@ -67,6 +67,7 @@ class SasExporter():
         # only manifests with these errors will be processed.
         if retry is not None:
             retry_mapper = {
+                "all": "all",
                 "http": "ClientResponseError",
                 "timeout": "SocketTimeoutError"
             }
