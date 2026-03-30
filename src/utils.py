@@ -66,23 +66,40 @@ def json_parse(data: str) -> Dict:
     return orjson.loads(data)
 
 
+def json_dumps(data: Dict|List) -> bytes:
+    return orjson.dumps(data, option=orjson.OPT_INDENT_2)
+
+
 def json_write(data: Dict|List, path: Path|str) -> None:
     """write a Dict to a JSON file"""
     with open(path, mode="wb") as fh:
-        d_str = orjson.dumps(data, option=orjson.OPT_INDENT_2)
+        d_str = json_dumps(data)
         fh.write(d_str)
 
 
 def json_read_if_exists(path: Path|str) -> Tuple[Dict, bool]:
-    """return a pair of {<dict>}, <file exists>"""
+    """return a pair of <dict>, <file exists>"""
     if not Path(path).exists():
         return {}, False
     data = json_read(path)
     return data, True
 
 def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
+    # NOTE: we define a timeout on read time only, not on waiting for a free connection or anything else.
+    # a significant time in our pipeline is spent waiting for a free conneciton.
+    # this timeout is shared by all requets made by the session.
+    #   - total : overall timeout for the entire request (connection + read)
+    #   - connect : time to acquire a connection from the pool + time to establish the TCP socket (i.e. it covers both pool wait and socket connection)
+    #   - sock_connect : time to establish the TCP socket only (excludes pool wait time)
+    #   - sock_read : time to wait for data from the server after the request is sent    return aiohttp.ClientSession(
     return aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(limit=max_connections)
+        connector=aiohttp.TCPConnector(limit=max_connections),
+        timeout=aiohttp.ClientTimeout(
+            total=None,        # no hard cap on the full lifecycle
+            connect=None,      # no cap on pool wait + sock_connect combined
+            sock_connect=10,   # timeout for TCP handshake/DNS only, excludes pool wait
+            sock_read=30       # timeout waiting for server response after request is sent
+        )
     )
 
 async def fetch_to_json(session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:

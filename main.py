@@ -12,20 +12,36 @@ from src.test_pagination import test_pagination as run_test_pagination
 from src.clean_manifest_errors import clean_manifest_errors as run_clean_manifest_errors
 from src.anno_to_digit import anno_to_digit as run_anno_to_digit
 
+export_retry_help_values = "one of: '*'|'timeout'|'http'|'http:XXX, where '*' means retry all errors and 'XXX' is an HTTP error code'"
+
+def export_retry_validator(ctx, param, value):
+    if not re.match(r"^(\*|timeout|http(:\d{3}))$", value):
+        print(f"Wrong value for parameter '{param}': '{value}'. Must be {export_retry_help_values}")
+
 @click.group()
 def cli():
     logger.info("*" * 50)
 
 @cli.command()
-def export():
+@click.option(
+    "-r", "--retry",
+    help=f"retry exports for manifests that failed at a previous fetch for a specific error type, {export_retry_help_values}"
+)
+def export(retry: str|None):
     """
     export all annotations from an SAS endpoint
+
+    if "-r" "--retry" is specified, only attempt to download annotations
+    for manifests that failed at a previous step. possible values or retry are:
+    "*" (refetch for all errors), "timeout" (refetch for timeout errors),
+    "http" (refetch for all HTTP errors), "http:XXX" (where XXX is an HTTP status code:
+    refetch only HTTP errors with a specific status code, i.e., 500.)
 
     if the endpoint of your IIIF Manifest provider has changed and those changes
     have not been reflected in your SAS, use the EXPORT_STRATEGY and IIIF_HOST_REPL
     env variables (and see their doc in .env.template).
     """
-    run_export()
+    run_export(retry)
 
 @cli.command()
 def test_pagination():
