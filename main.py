@@ -12,47 +12,20 @@ from src.test_pagination import test_pagination as run_test_pagination
 from src.clean_manifest_errors import clean_manifest_errors as run_clean_manifest_errors
 from src.anno_to_digit import anno_to_digit as run_anno_to_digit
 
-def validator(ctx, param, value):
-    if isinstance(value, str) and not URL_ROOT_REGEX.match(value):
-        raise click.BadParameter(fr"parameter '{param.name}' must be of form 'scheme://host' (i.e.: http://host.example.com) and match regex: {URL_ROOT_REGEX.pattern}")
-    return value
-
 @click.group()
 def cli():
     logger.info("*" * 50)
 
 @cli.command()
-@click.option(
-    "-s", "--strategy",
-    type=click.Choice(["search-api", "canvas"]),
-    default="search-api",
-    help="which SAS url to fetch annotations with"
-)
-@click.option(
-    "-a", "--alt-url-root",
-    type=click.STRING,
-    callback=validator,
-    help="alternative root URL of manifests in case it has changed (i.e., 'http://iiif.example1.com' -> 'http://iiif.example2.com')"
-)
-def export(strategy: Literal["search-api", "canvas"], alt_url_root: str):
+def export():
     """
     export all annotations from an SAS endpoint
 
-    "--strategy" and "--old-url-root" are both useful when the root URL of a
-    manifest provider has changed since manifests have been indexed in SAS.
-    indeed, when a manifest provider changes its URL, changes aren't mirrored in SAS
-    and it can leave orphanned annotations.
-
-    the --strategy option is used to determine which SAS route to use to export annotations:
-    with "search-api", use "/search-api/" (1 query per manifest).
-    with "canvas", use "/annotation/search/" (1 query per canvas of the manifest).
-    "canvas" takes MUCH longer, but can retrieve more annotations if the root of the
-    target URL has changed
-
-    if defining an "--alt-url-root" in conjunction with "canvas" strategy, for each canvas, query using both URLs.
-    this takes even more time but ensures a maximal number of orphaned annotations are retrieved.
+    if the endpoint of your IIIF Manifest provider has changed and those changes
+    have not been reflected in your SAS, use the EXPORT_STRATEGY and IIIF_SCHEME_REPL
+    env variables (and see their doc in .env.template).
     """
-    run_export(strategy, alt_url_root)
+    run_export()
 
 @cli.command()
 def test_pagination():

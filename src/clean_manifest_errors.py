@@ -67,11 +67,7 @@ async def pipeline():
     txt_out = "\n".join(str(fp) for fp in valid_annotation_list);
     with open(out_path, mode="w") as fh:
         fh.write(txt_out)
-    # DONE 1: mapper that maps an annotationList to all manifest URLs it contains
-    # DONE 2: generate a list of full paths to annotationLists that contain AT LEAST a valid URL
-    # DONE 3: write list to file as "\n" separated
-    # TODO 4: clean_manifest_errors.py and test.py should both be called by main.py:
-    # main should have 3 possible subcommands, export, test_pagination and clean_manifest_errors
+
 
 def clean_manifest_errors():
     """

@@ -94,7 +94,7 @@ async def fetch_to_json(session: aiohttp.ClientSession, url: str, params: Dict =
         r_text = await response.text()
     return json_parse(r_text)
 
-URL_ROOT_REGEX = re.compile(r"^https?:\/\/[^\/]+")
+URL_ROOT_REGEX = re.compile(r"^https?:\/\/[^\/]+,https?:\/\/[^\/]+")
 
 SRC_DIR = Path(__file__).parent.resolve()
 ROOT_DIR = SRC_DIR.parent.resolve()

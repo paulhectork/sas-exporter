@@ -187,17 +187,19 @@ class SasExporter():
         #   and i suspect that querying search_api with witXX_manXX will actually cause data loss.
         fetch = lambda x: self.fetch_to_json(f"{self.endpoint}/annotation/search", { "uri": x })
 
-        r_url_og = await fetch(canvas_id)   # pyright: ignore
         if self.alt_url_root is not None and len(self.alt_url_root):
-            canvas_id_rewrite = URL_ROOT_REGEX.sub(self.alt_url_root, canvas_id)
-            r_url_rewrite = await fetch(canvas_id_rewrite)
-            return [ *r_url_og, *r_url_rewrite ]
-        else:
-            return r_url_og  # pyright: ignore
+            canvas_id = URL_ROOT_REGEX.sub(self.alt_url_root, canvas_id)
+        return await fetch(canvas_id)  # pyright: ignore
+
 
     async def fetch_annotations_with_search_canvas(self, manifest_uri: str):
         # NOTE 1. the function requires that the manifest_uri can be dereferenced
         # NOTE 2. if there's a parsing error, the manifest wasn't found => this function will exit: no manifest can be extracted.
+        if (
+            self.alt_url_root is not None
+            and len(self.alt_url_root)
+        ): ...
+
         manifest = await self.fetch_to_json(manifest_uri)
         # 1. build a list of all canvas IDs to query
         canvas_uri_set = set(
