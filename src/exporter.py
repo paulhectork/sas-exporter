@@ -35,7 +35,6 @@ def iiif_collection_to_manifest_uri_list(iiif_collection: Dict) -> List[str]:
         if m["@type"] == "sc:Manifest"
     ]
 
-
 def fix_next_page_url(url: str|None) -> str|None:
     """
     NOTE dirty fix for annotation_list.next URLs:

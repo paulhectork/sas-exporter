@@ -13,7 +13,7 @@ from src.clean_manifest_errors import clean_manifest_errors as run_clean_manifes
 from src.anno_to_digit import anno_to_digit as run_anno_to_digit
 
 def validator(ctx, param, value):
-    if not URL_ROOT_REGEX.match(value):
+    if isinstance(value, str) and not URL_ROOT_REGEX.match(value):
         raise click.BadParameter(fr"parameter '{param.name}' must be of form 'scheme://host' (i.e.: http://host.example.com) and match regex: {URL_ROOT_REGEX.pattern}")
     return value
 
