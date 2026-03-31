@@ -1,10 +1,11 @@
 import re
 import os
 import json
-import aiohttp
 from pathlib import Path
 from typing import Dict, Generator, Tuple, List
 
+import asyncio
+import aiohttp
 import orjson
 
 def get_env_var(env_var: str) -> str:
@@ -86,14 +87,12 @@ def json_read_if_exists(path: Path|str) -> Tuple[Dict, bool]:
 
 def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
     # NOTE: we define a timeout on read time only, not on waiting for a free connection or anything else.
-    # a significant time in our pipeline is spent waiting for a free conneciton.
-    # this timeout is shared by all requets made by the session.
-    #   - total : overall timeout for the entire request (connection + read)
-    #   - connect : time to acquire a connection from the pool + time to establish the TCP socket (i.e. it covers both pool wait and socket connection)
-    #   - sock_connect : time to establish the TCP socket only (excludes pool wait time)
-    #   - sock_read : time to wait for data from the server after the request is sent    return aiohttp.ClientSession(
     return aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(limit=max_connections),
+        # NOTE TCPConnector limit must be higher than Semaphore limit
+        # so that connections are never the bottleneck;
+        # the semaphore always fires first and the queue stays empty.
+        # see `make_semaphore`
+        connector=aiohttp.TCPConnector(limit=max_connections+5),
         timeout=aiohttp.ClientTimeout(
             total=None,        # no hard cap on the full lifecycle
             connect=None,      # no cap on pool wait + sock_connect combined
@@ -102,13 +101,24 @@ def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
         )
     )
 
-async def fetch_to_json(session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:
+def make_semaphore(max_connections: int = 10) -> asyncio.Semaphore:
+    return asyncio.Semaphore(max_connections)
+
+async def fetch_to_json(semaphore: asyncio.Semaphore, session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:
     """
     must be run in an `async with aiohttp.ClientSession(...) as session` block:
     """
-    async with session.get(url, params=params) as response:
-        response.raise_for_status()
-        r_text = await response.text()
+    # NOTE: the semaphore actually controls the # of simultaneous connections.
+    # this is necessary with nested asyncio.gathers or very large queues:
+    # without it, the queue grows unbounded. this causes indefinite wait time,
+    # which causes stale connections => HTTP errors (servers side reset => query fails)
+    # on the contrary, using a semaphore moves the queue from aiohttp to asyncio.
+    # requests added to the session queue are run immediately, so there are no timeouts
+    # and server errors.
+    async with semaphore:
+        async with session.get(url, params=params) as response:
+            response.raise_for_status()
+            r_text = await response.text()
     return json_parse(r_text)
 
 strategy = os.getenv("EXPORT_STRATEGY")

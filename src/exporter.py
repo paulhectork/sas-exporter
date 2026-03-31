@@ -246,7 +246,7 @@ class SasExporter():
         ]
         # 4. concatenate results in an annotation list.
         # list of list of annotations
-        results: List[List[Dict]] = await asyncio.gather(*tasks)
+        results: List[List[Dict]] = await tqdm_asyncio.gather(*tasks, desc=manifest_uri)
         # list of asnnotations
         annotation_array: List[Dict] = [
             _r for r in results for _r in r
@@ -347,11 +347,13 @@ class SasExporter():
             self.fetch_annotations_from_manifest_uri(m_uri)
             for m_uri in manifests_to_download
         ]
-        await tqdm_asyncio.gather(
-            *tasks,
-            total=len(manifests_to_download),
-            desc=f"Downloading annotation lists"
-        )
+        # await tqdm_asyncio.gather(
+        #     *tasks,
+        #     total=len(manifests_to_download),
+        #     desc=f"Downloading annotation lists"
+        # )
+        for t in tasks:
+            await t
         return self
 
     async def pipeline_async(self) -> "SasExporter":
