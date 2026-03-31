@@ -276,9 +276,8 @@ class SasExporter():
         """
         pipeline to download a single annotation_list
 
-        finishes by appending to `self.save_data` a dict on the extracted annotations:
-            - if the download succeeds: (<manifest_uri, path_to_downloaded_annotation_list>)
-            - if the download fails: (<manifest_uri>, None)
+        finishes by appending to `self.save_data` a dict on the extracted annotations.
+        structure changes between success and errors.
         """
         manifest_short_id = manifest_uri_to_short_id(manifest_uri)
         out_path = self.annotation_list_path(manifest_short_id)

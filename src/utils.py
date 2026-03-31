@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Dict, Generator, Tuple, List
 
+import tenacity
 import asyncio
 import aiohttp
 import orjson
@@ -110,6 +111,13 @@ def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
         )
     )
 
+# retry 5 times, waiting 1-5 seconds between each
+@tenacity.retry(
+    retry=tenacity.retry_if_exception_type(aiohttp.ClientResponseError),
+    stop=tenacity.stop_after_attempt(5),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=5),
+    reraise=True  # if it still fails, raise the original error instead of tenacity.RetryError.
+)
 async def fetch_to_json(semaphore: asyncio.Semaphore, session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:
     """
     must be run in an `async with aiohttp.ClientSession(...) as session` block:
