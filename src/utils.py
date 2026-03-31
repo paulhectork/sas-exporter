@@ -85,13 +85,22 @@ def json_read_if_exists(path: Path|str) -> Tuple[Dict, bool]:
     data = json_read(path)
     return data, True
 
+def make_semaphore(max_connections: int = 10) -> asyncio.Semaphore:
+    # NOTE: the semaphore actually controls the # of simultaneous connections.
+    # this is necessary with nested asyncio.gathers or very large queues:
+    # without it, the queue grows unbounded. this causes indefinite wait time,
+    # which causes stale connections => HTTP errors (servers side reset => query fails)
+    # on the contrary, using a semaphore moves the queue from aiohttp to asyncio.
+    # requests added to the session queue are run immediately, so there are no timeouts
+    # and server errors.
+    return asyncio.Semaphore(max_connections)
+
 def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
     # NOTE: we define a timeout on read time only, not on waiting for a free connection or anything else.
     return aiohttp.ClientSession(
         # NOTE TCPConnector limit must be higher than Semaphore limit
-        # so that connections are never the bottleneck;
-        # the semaphore always fires first and the queue stays empty.
-        # see `make_semaphore`
+        # so that the aiohttp.Session queue is always empty
+        # (otherwise, risk of timeouts, stale connections etc.)
         connector=aiohttp.TCPConnector(limit=max_connections+5),
         timeout=aiohttp.ClientTimeout(
             total=None,        # no hard cap on the full lifecycle
@@ -101,20 +110,10 @@ def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
         )
     )
 
-def make_semaphore(max_connections: int = 10) -> asyncio.Semaphore:
-    return asyncio.Semaphore(max_connections)
-
 async def fetch_to_json(semaphore: asyncio.Semaphore, session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:
     """
     must be run in an `async with aiohttp.ClientSession(...) as session` block:
     """
-    # NOTE: the semaphore actually controls the # of simultaneous connections.
-    # this is necessary with nested asyncio.gathers or very large queues:
-    # without it, the queue grows unbounded. this causes indefinite wait time,
-    # which causes stale connections => HTTP errors (servers side reset => query fails)
-    # on the contrary, using a semaphore moves the queue from aiohttp to asyncio.
-    # requests added to the session queue are run immediately, so there are no timeouts
-    # and server errors.
     async with semaphore:
         async with session.get(url, params=params) as response:
             response.raise_for_status()
