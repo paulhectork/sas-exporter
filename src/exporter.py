@@ -149,7 +149,7 @@ class SasExporter():
         json_write(data, fp)
         return self
 
-    def write_save_data(self, save_ok_data:Dict, save_err_data:List) -> "SasExporter":
+    def write_save_data(self, save_ok_data:Dict, save_err_data:Dict) -> "SasExporter":
         # NOTE: split self.save_data in 2 items: one with successful saves, one with errors.
         # write both to file. in `self.fetch_annotations_from_manifest_uri`, if there's a DL error, path is set to None
         json_write(save_ok_data, self.save_ok_file)
@@ -357,11 +357,11 @@ class SasExporter():
         #       will cause runtime errors (the queue is occupied entierly by
         #       fetching manifests and the requests for fetching annotations
         #       are queued up but never run before a timeout)
-        tasks = [
-            self.fetch_annotations_from_manifest_uri(m_uri)
-            for m_uri in manifests_to_download
-        ]
         if (self.strategy != "canvas"):
+            tasks = [
+                self.fetch_annotations_from_manifest_uri(m_uri)
+                for m_uri in manifests_to_download
+            ]
             await tqdm_asyncio.gather(
                 *tasks,
                 total=len(manifests_to_download),
@@ -369,19 +369,23 @@ class SasExporter():
             )
         else:
             time = None
-            total = len(tasks)
-            for i, task in enumerate(tasks):
+            total = len(manifests_to_download)
+            calc_timedelta = lambda t: timedelta(seconds=round(t,0))  # t: int = time in seconds
+            elapsed = 0
+            for i, m_uri in enumerate(manifests_to_download):
                 if time is not None:
                     time_item = round(time, 2)  # round to 1/100th of a second
-                    remaining = timedelta(seconds=round(time_item*(total-i),0))  # round to seconds
+                    remaining = calc_timedelta(time*(total-i))
+                    elapsed += time  # time since start in seconds
                 else:
                     time_item = "??"
                     remaining = "??"
-                time_info = f"({time_item}s/it, {remaining} remaining)"
+                elapsed_td = calc_timedelta(elapsed)
                 done = round(100*i/total, 2)
+                time_info = f"[{time_item}s/it, {done}%, elapsed={elapsed_td}, remaining={remaining}]"
                 s = timer()
-                print(f"fetching annotations for manifest {i}/{total} {done}% {time_info}")
-                await task
+                print(f"fetching annotations for manifest {i}/{total} {time_info}")
+                await self.fetch_annotations_from_manifest_uri(m_uri)
                 e = timer()
                 time = e-s
 
