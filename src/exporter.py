@@ -4,6 +4,8 @@ import copy
 import asyncio
 import traceback
 from pathlib import Path
+from datetime import timedelta
+from timeit import default_timer as timer
 from typing import List, Dict, Tuple, Literal
 
 import aiohttp
@@ -25,7 +27,8 @@ from .utils import (
     json_read_if_exists,
     json_write,
     fetch_to_json,
-    make_session
+    make_session,
+    make_semaphore
 )
 from .logger import logger
 
@@ -103,6 +106,7 @@ class SasExporter():
         # HTTP client session
         # defined in __aenter__ / closed in `__aexit__`
         self._session: aiohttp.ClientSession | None = None
+        self.semaphore = make_semaphore(self.max_connections)
 
         logger.info(f"Initiated SasExporter successfully (strategy={self.strategy}, iiif_host_repl={self.iiif_host_repl}, max_connections={self.max_connections}).")
         if exists:
@@ -170,7 +174,7 @@ class SasExporter():
         return save_ok_data, save_err_data
 
     async def fetch_to_json(self, url: str, params: Dict = {}) -> Dict|List:
-        return await fetch_to_json(self.session, url, params)
+        return await fetch_to_json(self.semaphore, self.session, url, params)
 
     async def fetch_annotation_list_paginated(self, url: str) -> Dict:
         """
@@ -246,7 +250,7 @@ class SasExporter():
         ]
         # 4. concatenate results in an annotation list.
         # list of list of annotations
-        results: List[List[Dict]] = await tqdm_asyncio.gather(*tasks, desc=manifest_uri)
+        results: List[List[Dict]] = await tqdm_asyncio.gather(*tasks, desc=manifest_uri_to_short_id(manifest_uri))
         # list of asnnotations
         annotation_array: List[Dict] = [
             _r for r in results for _r in r
@@ -343,17 +347,44 @@ class SasExporter():
                 ]
 
         logger.info(f"Fetching annotations for {len(manifests_to_download)} manifests.")
+
+        # NOTE: parrallelization and asyncio.gather:
+        # - if self.strategy==search-api, parallelize all
+        #       `fetch_annotations_from_manifest_uri` using asyncio.gather
+        # - if self.strategy==canvas, DO NOT use asyncio.gather on
+        #       `fetch_annotations_from_manifest_uri`:
+        #       there is a nested asyncio.gather (1 request/canvas), which
+        #       will cause runtime errors (the queue is occupied entierly by
+        #       fetching manifests and the requests for fetching annotations
+        #       are queued up but never run before a timeout)
         tasks = [
             self.fetch_annotations_from_manifest_uri(m_uri)
             for m_uri in manifests_to_download
         ]
-        # await tqdm_asyncio.gather(
-        #     *tasks,
-        #     total=len(manifests_to_download),
-        #     desc=f"Downloading annotation lists"
-        # )
-        for t in tasks:
-            await t
+        if (self.strategy != "canvas"):
+            await tqdm_asyncio.gather(
+                *tasks,
+                total=len(manifests_to_download),
+                desc=f"Downloading annotation lists"
+            )
+        else:
+            time = None
+            total = len(tasks)
+            for i, task in enumerate(tasks):
+                if time is not None:
+                    time_item = round(time, 2)  # round to 1/100th of a second
+                    remaining = timedelta(seconds=round(time_item*(total-i),0))  # round to seconds
+                else:
+                    time_item = "??"
+                    remaining = "??"
+                time_info = f"({time_item}s/it, {remaining} remaining)"
+                done = round(100*i/total, 2)
+                s = timer()
+                print(f"fetching annotations for manifest {i}/{total} {done}% {time_info}")
+                await task
+                e = timer()
+                time = e-s
+
         return self
 
     async def pipeline_async(self) -> "SasExporter":
