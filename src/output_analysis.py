@@ -6,14 +6,8 @@ from .utils import (
     SAVE_OK_FILE,
     SAVE_ERR_FILE,
     OUT_DIR,
-    ANNOTATIONS_DIR,
-    MAX_CONNECTIONS,
-    ANNOTATION_LIST_TEMPLATE,
-    IIIF_HOST_REPL,
-    TIMEOUT,
     EXPORT_STRATEGY,
     json_dumps,
-    json_read_if_exists,
     json_write,
     json_read,
     manifest_uri_to_short_id
@@ -37,7 +31,7 @@ def expand_manifest_short_id(manifest_uri: str) -> dict[str, str|None]:
         "region_id": short_id[2] if len(short_id) == 3 else None
     }
 
-def get_alt_matches_for_item(
+def get_alt_matches_for_manifest_uri(
     match_for: Literal["500", "KeyError"],
     manifest_uri:str,
     ok_json:dict,
@@ -71,7 +65,7 @@ def get_alt_matches(match_for: Literal["500", "KeyError"], errors: list[dict], o
     alt_matches = []
     no_alt_matches = []
     for e in errors:
-        _alt_matches = get_alt_matches_for_item(match_for, e["manifest_uri"], ok_json)
+        _alt_matches = get_alt_matches_for_manifest_uri(match_for, e["manifest_uri"], ok_json)
         if len(_alt_matches):
             alt_matches.append(e["manifest_uri"])
         else:
