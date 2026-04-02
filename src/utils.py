@@ -86,6 +86,9 @@ def json_read_if_exists(path: Path|str) -> Tuple[Dict, bool]:
     data = json_read(path)
     return data, True
 
+def manifest_uri_to_short_id(manifest_uri: str) -> str:
+    return manifest_uri.split("/")[-2]
+
 def make_semaphore(max_connections: int = 10) -> asyncio.Semaphore:
     # NOTE: the semaphore actually controls the # of simultaneous connections.
     # this is necessary with nested asyncio.gathers or very large queues:

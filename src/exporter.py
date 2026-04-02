@@ -28,14 +28,12 @@ from .utils import (
     json_write,
     fetch_to_json,
     make_session,
-    make_semaphore
+    make_semaphore,
+    manifest_uri_to_short_id
 )
 from .logger import logger
 
 STEP_NAME = "export"
-
-def manifest_uri_to_short_id(manifest_uri: str) -> str:
-    return manifest_uri.split("/")[-2]
 
 def fix_next_page_url(url: str|None) -> str|None:
     """
