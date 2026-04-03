@@ -9,7 +9,7 @@ from src.logger import logger
 from src.exporter import export as run_export
 from src.test_pagination import test_pagination as run_test_pagination
 from src.clean_manifest_errors import clean_manifest_errors as run_clean_manifest_errors
-from src.anno_to_digit import anno_to_digit as run_anno_to_digit
+from src.migrate_structure import migrate_structure as run_migrate_structure
 from src.output_analysis import output_analysis as run_output_analysis
 
 export_retry_help_values = "one of: 'all'|'timeout'|'http'|'http:XXX, where '*' means retry all errors and 'XXX' is an HTTP error code"
@@ -69,11 +69,11 @@ def clean_manifest_error():
     run_clean_manifest_errors()
 
 @cli.command()
-def anno_to_digit():
+def migrate_structure():
     """
-    aikon-specific process to migrate manifest structure
+    aikon-specific process to migrate annotation structure (mostly update annotation targets)
     """
-    run_anno_to_digit()
+    run_migrate_structure()
 
 @cli.command()
 def output_analysis():
