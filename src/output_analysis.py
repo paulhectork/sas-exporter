@@ -155,7 +155,7 @@ def pipeline():
         out["err_desc"]["errors"].append(err_desc)
 
     print(json_dumps(out).decode("utf-8"))
-    json_write(out, OUT_DIR / "_output_analysis.json")
+    json_write(out, OUT_DIR / "output_analysis.json")
 
 
 def output_analysis():
