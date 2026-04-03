@@ -1,4 +1,5 @@
 import re
+import textwrap
 from typing import Literal
 
 import click
@@ -34,11 +35,14 @@ def export(retry: str|None):
     """
     export all annotations from an SAS endpoint
 
+    \b
     if "-r" "--retry" is specified, only attempt to download annotations
     for manifests that failed at a previous step. possible values or retry are:
-    "all" (refetch for all errors), "timeout" (refetch for timeout errors),
-    "http" (refetch for all HTTP errors), "http:XXX" (where XXX is an HTTP status code:
-    refetch only HTTP errors with a specific status code, i.e., 500.)
+    - "all" (refetch for all errors),
+    - "timeout" (refetch for timeout errors),
+    - "http" (refetch for all HTTP errors),
+    - "http:XXX" (where XXX is an HTTP status code: refetch only HTTP
+        errors with a specific status code, i.e., 500.)
 
     if the endpoint of your IIIF Manifest provider has changed and those changes
     have not been reflected in your SAS, use the EXPORT_STRATEGY and IIIF_HOST_REPL

@@ -29,28 +29,40 @@ cp .env.template .env
 uv run main.py export
 ```
 
+4. **(optional) retry export on specific errors**: after a first failed export, redownload errors only. if you set a value other than `all`, retry only for specific errors.
+
+```bash
+uv run main.py --retry all|timeout|http|http:XXX  # XXX = http error code
+```
+
 ---
 
 ## extra commands
 
 these can only be run after a first export has been done !!!
 
-1. **test if pagination worked**. this is by no way a real test suite, but after running a (partial) export you can test that the number of annotations is the same as was expected
+0. **analyze export success**: how many successful/failed exports, which exports, which errors were encountered...
 
 ```bash
-uv run main.py test_pagination
+uv run main.py output-analysis
 ```
 
-2. **generate a list of "valid" AnnotationLists**. valid AnnotationLists are those whose manifests can be fetched correctly (useful to import into [aiiinotate](github.com/Aikon-platform/aiiinotate))
+1. **test if pagination worked** (works only if `$EXPORT_STRATEGY=search-api`). this is by no way a real test suite, but after running a (partial) export you can test that the number of annotations is the same as was expected
 
 ```bash
-uv run main.py clean_manifest_errors
+uv run main.py test-pagination
 ```
 
-3. [AIKON-SPECIFIC] **update annotations** from regions-extraction-as-target to digitization-as-target (see docstring of `./src/anno_to_digit`).
+2. **generate a list of "valid" AnnotationLists**. (useless if `$EXPORT_STRATEGY=canvas`) valid AnnotationLists are those whose manifests can be fetched correctly (useful to import into [aiiinotate](github.com/Aikon-platform/aiiinotate))
 
 ```bash
-uv run main.py anno_to_digit
+uv run main.py clean-manifest-errors
+```
+
+3. [AIKON-SPECIFIC] **update annotation JSON structure** from regions-extraction-as-target to digitization-as-target (see docstring of `./src/migrate_structure`).
+
+```bash
+uv run main.py migrate-structure
 ```
 
 ---
@@ -58,10 +70,13 @@ uv run main.py anno_to_digit
 ## export workflow
 
 1. **get manifests**: query `$SAS_ENDPOINT/manifests` to get the collection of all manifests indexed in the SAS instance
-2. **get annotations**: for each manifest, query the `search-api` to retrieve all annotations related to the manifest
-3. **progress saving**: if the program stops before completing, the files `$OUT_DIR/_save_ok.json` and `$OUT_DIR/_save_err.json` track respectively the manifests processed successfully and the ones that failed.
-    - if `_save_ok.json` contains items, they will not be redownloaded on the next runs of `sas-exporter`
-    - annotations of the manifests listed in `_save_err.json` will, however, be redownloaded.
+2.  **get annotations**: 
+    - if `$EXPORT_STRATEGY=search-api`: for each manifest, query the `/search-api/` to retrieve all annotations related to the manifest
+    - if `$EXPORT_STRATEGY=canvas`: for each manifest, build an index of canvases. for each canvas, query the `/annotation/search` route to get annotations for the manifest
+    - at the end, concatenate all results for a manifest into a single AnnotationList.
+3. **progress saving and error logging**: 
+    - `$OUT_DIR/_save_ok.json` saves all successfull downloads, `$OUT_DIR/_save_err.json` logs all manifests that could not be processed.
+    - if the program stops before completing, the files `$OUT_DIR/_save_ok.json` are not redownloaded. annotations in `$OUT_DIR/_save_err.json` are redownloaded.
 
 ---
 
@@ -72,10 +87,11 @@ $OUT_DIR/                            # output directory
  |_ manifests_collection.json        # IIIF collection of all manifests indexed in SAS
  |_ _save_ok.json                    # log of all successful annotation downloads
  |_ _save_err.json                   # log of all failed annotation downloads at the previous step
- |_ annotationlists_valid.txt        # output of `clean_manifest_errors`
+ |_ annotationlists_valid.txt        # output of `clean-manifest-errors`
+ |_ output_analysis.json             # output of `output-analysis` 
  |_ annotations/                     # folder storing all annotations
  |   |_ $manifest_short_id.json      # all annotations related to a single manifest
- |_ annotations_anno_to_digit  # output of `anno_to_digit`, same structure as `annotations/`
+ |_ annotations_anno_to_digit  # output of `anno-to-digit`, same structure as `annotations/`
      |_ $manifest_short_id.json      # updated annotationlist
 ```
 
