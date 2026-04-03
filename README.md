@@ -1,6 +1,6 @@
 # sas-exporter: export annotations from SAS
 
-Provide the URL to an SAS endpoint, and export all annotations stored on it !
+provide the URL to an SAS endpoint, and export all annotations stored on it !
 
 ---
 
