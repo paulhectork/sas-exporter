@@ -70,8 +70,10 @@ def get_alt_matches(match_for: Literal["500", "KeyError"], errors: list[dict], o
             alt_matches.append(e["manifest_uri"])
         else:
             no_alt_matches.append(e["manifest_uri"])
+    assert len(alt_matches) + len(no_alt_matches) == len(errors)
     return {
         f"{key}_matches_count": len(alt_matches),
+        f"no_{key}_matches_count": len(no_alt_matches),
         f"no_{key}_matches": no_alt_matches
     }
 

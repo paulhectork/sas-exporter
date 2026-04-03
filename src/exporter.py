@@ -370,6 +370,7 @@ class SasExporter():
             calc_timedelta = lambda t: timedelta(seconds=round(t,0))  # t: int = time in seconds
             elapsed = 0
             for i, m_uri in enumerate(manifests_to_download):
+                i += 1
                 if time is not None:
                     time_item = round(time, 2)  # round to 1/100th of a second
                     remaining = calc_timedelta(time*(total-i))
