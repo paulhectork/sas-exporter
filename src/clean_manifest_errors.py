@@ -26,6 +26,8 @@ async def validate_manifest(session: aiohttp.ClientSession, manifest_url: str) -
     try:
         await fetch_to_json(SEMAPHORE, session, manifest_url)
         return manifest_url
+    except aiohttp.ClientResponseError:
+        return None
     except JSONDecodeError:
         return None
 
