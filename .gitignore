@@ -12,6 +12,7 @@ wheels/
 # paths
 .env
 log/*
+log*/*
 out/*
 out*/*
 !out/_save.json
