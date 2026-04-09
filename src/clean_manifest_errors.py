@@ -9,11 +9,14 @@ from .utils import (
     OUT_DIR,
     fetch_to_json,
     json_read_from_dir,
-    make_session
+    make_session,
+    make_semaphore
 )
 from .logger import logger
 
 STEP_NAME = "clean_manifest_errors"
+
+SEMAPHORE = make_semaphore(MAX_CONNECTIONS)
 
 async def validate_manifest(session: aiohttp.ClientSession, manifest_url: str) -> str|None:
     """
@@ -21,7 +24,7 @@ async def validate_manifest(session: aiohttp.ClientSession, manifest_url: str) -
     if there's a JSONDecodeError, the manifest could not be fetched
     """
     try:
-        await fetch_to_json(session, manifest_url)
+        await fetch_to_json(SEMAPHORE, session, manifest_url)
         return manifest_url
     except JSONDecodeError:
         return None
