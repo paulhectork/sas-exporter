@@ -137,6 +137,8 @@ if strategy not in ["search-api", "canvas"]:
 EXPORT_STRATEGY = strategy
 
 iiif_host_repl = os.getenv("IIIF_HOST_REPL")
+if isinstance(iiif_host_repl, str) and not len(iiif_host_repl.strip()):
+    iiif_host_repl = None
 if iiif_host_repl is not None:
     iiif_host_repl = iiif_host_repl.split(",")
     if not len(iiif_host_repl) == 2:
