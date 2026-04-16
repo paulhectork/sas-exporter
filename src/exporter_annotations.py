@@ -15,16 +15,14 @@ from src.exporter_base import SasExporterBase
 from .logger import logger
 from .utils import (
     SAS_ENDPOINT,
-    SAVE_OK_FILE,
-    ANNOTATIONS_DIR,
-    SAVE_ERR_FILE,
+    SAVE_OK_FILE_ANNOTATIONS,
+    SAVE_ERR_FILE_ANNOTATIONS,
     ANNOTATION_LIST_TEMPLATE,
     EXPORT_STRATEGY,
     json_write,
-    manifest_uri_to_short_id
 )
 
-STEP_NAME = "export"
+STEP_NAME = "export_annotations"
 
 def fix_next_page_url(url: str|None) -> str|None:
     """
@@ -42,13 +40,17 @@ def fix_next_page_url(url: str|None) -> str|None:
 
 
 class SasExporterAnnotations(SasExporterBase):
-    def __init__(self, retry: str|None):
+    def __init__(self, retry: str|None, export_manifests: bool = False):
         super().__init__(retry)
         self.strategy = EXPORT_STRATEGY
 
-        self.annotations_dir = ANNOTATIONS_DIR
-        self.save_ok_file = SAVE_OK_FILE
-        self.save_err_file = SAVE_ERR_FILE
+        self.save_ok_file = SAVE_OK_FILE_ANNOTATIONS
+        self.save_err_file = SAVE_ERR_FILE_ANNOTATIONS
+
+        if export_manifests and not self.strategy == "canvas":
+            logger.error(f"export_manifests can only be used if `EXPORT_STRATEGY=='canvas'`. exiting !")
+            exit(1)
+        self.export_manifests = bool(export_manifests)
 
         logger.info(f"Initiated SasExporterAnnotations successfully (strategy={self.strategy}, iiif_host_repl={self.iiif_host_repl}, max_connections={self.max_connections}).")
         self.load_save()
@@ -56,9 +58,6 @@ class SasExporterAnnotations(SasExporterBase):
     def endpoint_annotations(self, manifest_short_id: str) -> str:
         # search-api endpoint returns all annotations for a manifest, paginated.
         return f"{self.endpoint}/search-api/{manifest_short_id}/search"
-
-    def annotation_list_path(self, manifest_short_id: str) -> str|Path:
-        return self.annotations_dir / f"{manifest_short_id}.json"
 
     async def fetch_annotation_list_paginated(self, url: str) -> Dict:
         """
@@ -110,7 +109,7 @@ class SasExporterAnnotations(SasExporterBase):
              since IIIF annotation targets have not been updated.
         """
         # 1. build a list of all canvas IDs to query
-        manifest = self.fetch_manifest(manifest_uri)
+        manifest = self.fetch_manifest(manifest_uri, to_file=self.export_manifests)
 
         # NOTE: in some cases, this will raise a KeyError: in AIKON, a JSON is returned, but with the structure { "response": "...", "reason": "..." }
         # this is caused by a deleted witness.
@@ -132,13 +131,13 @@ class SasExporterAnnotations(SasExporterBase):
         ]
         # 4. concatenate results in an annotation list.
         # list of list of annotations
-        results: List[List[Dict]] = await tqdm_asyncio.gather(*tasks, desc=manifest_uri_to_short_id(manifest_uri))
+        results: List[List[Dict]] = await tqdm_asyncio.gather(*tasks, desc=self.manifest_uri_to_short_id(manifest_uri))
         # list of asnnotations
         annotation_array: List[Dict] = [
             _r for r in results for _r in r
         ]
         annotation_list = copy.deepcopy(ANNOTATION_LIST_TEMPLATE)
-        annotation_list["@id"] = manifest_uri_to_short_id(manifest_uri)
+        annotation_list["@id"] = self.manifest_uri_to_short_id(manifest_uri)
         annotation_list["resources"] = annotation_array
         return annotation_list
 
@@ -149,7 +148,7 @@ class SasExporterAnnotations(SasExporterBase):
         finishes by appending to `self.save_data` a dict on the extracted annotations.
         structure changes between success and errors.
         """
-        manifest_short_id = manifest_uri_to_short_id(manifest_uri)
+        manifest_short_id = self.manifest_uri_to_short_id(manifest_uri)
         out_path = self.annotation_list_path(manifest_short_id)
 
         try:
@@ -223,12 +222,12 @@ class SasExporterAnnotations(SasExporterBase):
     async def pipeline_async(self) -> "SasExporterAnnotations":
         # this wraps the pipeline in an async context manager, with a sincle client session.
         async with self:
-            await self.fetch_manifests()
+            await self.fetch_manifest_collection()
             logger.info(f"Found {len(self.manifests)} manifests for which to extract annotations.")
             await self.fetch_annotations()
         return self
 
-def export(retry: str|None):
+def export(retry: str|None, export_manifests: bool = False):
     logger.info(f"RUNNING   : {STEP_NAME}")
-    SasExporterAnnotations(retry).pipeline()
+    SasExporterAnnotations(retry, export_manifests).pipeline()
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")

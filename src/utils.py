@@ -9,6 +9,7 @@ import asyncio
 import aiohttp
 import orjson
 
+
 def get_env_var(env_var: str) -> str:
     v = os.getenv(env_var, default="")
     if v == "":
@@ -48,6 +49,7 @@ def json_read(path: Path|str) -> Dict:
         d_str = fh.read()
         return orjson.loads(d_str)
 
+
 def json_read_from_dir(path: Path|str) -> Generator[Tuple[str|Path, Dict], None, None]:
     """
     generator that yields (filepath, <JSON contents as dict>) for all files in a directory
@@ -62,6 +64,7 @@ def json_read_from_dir(path: Path|str) -> Generator[Tuple[str|Path, Dict], None,
         else:
             yield fp, {}
     return
+
 
 def json_parse(data: str) -> Dict:
     """parse a string to a Dict"""
@@ -86,8 +89,10 @@ def json_read_if_exists(path: Path|str) -> Tuple[Dict, bool]:
     data = json_read(path)
     return data, True
 
+
 def manifest_uri_to_short_id(manifest_uri: str) -> str:
     return manifest_uri.split("/")[-2]
+
 
 def make_semaphore(max_connections: int = 10) -> asyncio.Semaphore:
     # NOTE: the semaphore actually controls the # of simultaneous connections.
@@ -98,6 +103,7 @@ def make_semaphore(max_connections: int = 10) -> asyncio.Semaphore:
     # requests added to the session queue are run immediately, so there are no timeouts
     # and server errors.
     return asyncio.Semaphore(max_connections)
+
 
 def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
     # NOTE: we define a timeout on read time only, not on waiting for a free connection or anything else.
@@ -113,6 +119,7 @@ def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
             sock_read=30       # timeout waiting for server response after request is sent
         )
     )
+
 
 # retry 5 times, waiting 1-5 seconds between each
 @tenacity.retry(
@@ -130,6 +137,7 @@ async def fetch_to_json(semaphore: asyncio.Semaphore, session: aiohttp.ClientSes
             response.raise_for_status()
             r_text = await response.text()
     return json_parse(r_text)
+
 
 strategy = os.getenv("EXPORT_STRATEGY")
 if strategy not in ["search-api", "canvas"]:
@@ -159,8 +167,11 @@ ROOT_DIR = SRC_DIR.parent.resolve()
 LOG_DIR = set_and_make_dir_from_env("LOG_DIR", ROOT_DIR)
 OUT_DIR = set_and_make_dir_from_env("OUT_DIR", ROOT_DIR)
 ANNOTATIONS_DIR = make_path(OUT_DIR / "annotations", True)
-SAVE_OK_FILE = Path(OUT_DIR / "_save_ok.json")
-SAVE_ERR_FILE = Path(OUT_DIR / "_save_err.json")
+MANIFESTS_DIR = make_path(OUT_DIR / "manifests", True)
+SAVE_OK_FILE_ANNOTATIONS = Path(OUT_DIR / "_save_ok_annotations.json")
+SAVE_ERR_FILE_ANNOTATIONS = Path(OUT_DIR / "_save_err_annotations.json")
+SAVE_OK_FILE_MANIFESTS = Path(OUT_DIR / "_save_ok_manifests.json")
+SAVE_ERR_FILE_MANIFESTS = Path(OUT_DIR / "_save_err_manifests.json")
 SAS_ENDPOINT = get_env_var("SAS_ENDPOINT")
 MAX_CONNECTIONS = int(get_env_var("MAX_CONNECTIONS"))
 

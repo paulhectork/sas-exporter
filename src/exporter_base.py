@@ -14,12 +14,14 @@ from .utils import (
     MAX_CONNECTIONS,
     IIIF_HOST_REPL,
     TIMEOUT,
-    json_dumps,
+    ANNOTATIONS_DIR,
+    MANIFESTS_DIR,
     json_read_if_exists,
     json_write,
     fetch_to_json,
     make_session,
     make_semaphore,
+    manifest_uri_to_short_id
 )
 from .logger import logger
 
@@ -48,6 +50,9 @@ class SasExporterBase():
 
         self.endpoint = SAS_ENDPOINT
 
+        self.annotations_dir = ANNOTATIONS_DIR
+        self.manifests_dir = MANIFESTS_DIR
+
         self.retry_filter = retry_filter
         self.iiif_host_repl: None|Tuple[str,str] = IIIF_HOST_REPL
         self.timeout = TIMEOUT
@@ -70,6 +75,9 @@ class SasExporterBase():
         # otherwise, we retry a download only on specific errors.
         self.save_ok_file = ""
         self.save_err_file = ""
+
+        self.manifest_uri_to_short_id = manifest_uri_to_short_id
+        return
 
     def load_save(self):
         ok_exists = None
@@ -132,16 +140,31 @@ class SasExporterBase():
 
         return save_ok_data, save_err_data
 
+    def annotation_list_path(self, manifest_short_id: str) -> str|Path:
+        return self.annotations_dir / f"{manifest_short_id}.json"
+
+    def manifest_path(self, manifest_short_id: str) -> str|Path:
+        return self.manifests_dir / f"{manifest_short_id}.json"
+
     async def fetch_to_json(self, url: str, params: Dict = {}) -> Dict|List:
         return await fetch_to_json(self.semaphore, self.session, url, params)
 
-    async def fetch_manifest(self, manifest_uri: str) -> Dict:
+    async def fetch_manifest(self, manifest_uri: str, to_file: bool = False) -> Dict:
         # replace old IIIF host (indexed in SAS but NOT accessible on our IIIF server) by new IIIF host.
         if self.iiif_host_repl is not None:
             manifest_uri = manifest_uri.replace(self.iiif_host_repl[0], self.iiif_host_repl[1])
-        return await self.fetch_to_json(manifest_uri)  # pyright: ignore
 
-    async def fetch_manifests(self) -> "SasExporterBase":
+        manifest = await self.fetch_to_json(manifest_uri)  # pyright: ignore
+
+        # if to_file, save the manifest.
+        if to_file:
+            json_write(
+                manifest,
+                self.manifest_path(self.manifest_uri_to_short_id(manifest_uri))
+            )
+        return manifest  # pyright: ignore
+
+    async def fetch_manifest_collection(self) -> "SasExporterBase":
         manifests = []
         collection = await self.fetch_to_json(self.endpoint_manifests)
         manifests = [
@@ -152,21 +175,6 @@ class SasExporterBase():
         json_write(manifests, self.out_dir / "manifests_collection.json")
         self.manifests = manifests
         return self
-
-    def make_err_obj(self, e: Exception) -> Dict:
-        """
-        build an informative object logging info on the exception
-        """
-        err_obj = {
-            "success": False,
-            "error_type": type(e).__name__
-        }
-        # build an error description
-        if hasattr(e, "message"):
-            err_obj["error_message"] = e.message  # pyright: ignore
-        if hasattr(e, "status"):
-            err_obj["http_status"] = e.status  # pyright: ignore
-        return err_obj
 
     def apply_retry_filter(self) -> List[str]:
         """
@@ -210,6 +218,21 @@ class SasExporterBase():
                     and self.save_err_previous[m]["error_type"] == self.retry_filter["error_type"]
                 ]
         return manifests_to_download
+
+    def make_err_obj(self, e: Exception) -> Dict:
+        """
+        build an informative object logging info on the exception
+        """
+        err_obj = {
+            "success": False,
+            "error_type": type(e).__name__
+        }
+        # build an error description
+        if hasattr(e, "message"):
+            err_obj["error_message"] = e.message  # pyright: ignore
+        if hasattr(e, "status"):
+            err_obj["http_status"] = e.status  # pyright: ignore
+        return err_obj
 
     def pipeline_async(self):
         raise NotImplementedError("SasExporterBase.pipeline_async must be implemented by classes inheriting from SasExporterBase !")
