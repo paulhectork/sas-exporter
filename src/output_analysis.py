@@ -3,8 +3,8 @@ from typing import List, Dict, Literal
 
 from .utils import (
     SAS_ENDPOINT,
-    SAVE_OK_FILE,
-    SAVE_ERR_FILE,
+    SAVE_OK_FILE_ANNOTATIONS,
+    SAVE_ERR_FILE_ANNOTATIONS,
     OUT_DIR,
     EXPORT_STRATEGY,
     json_dumps,
@@ -87,8 +87,8 @@ def pipeline():
     4. 500 errors should be caused by a deleted digitization
           => see if there's a matching witness for the manifestShortId
     """
-    ok_json = json_read(SAVE_OK_FILE)
-    err_json = json_read(SAVE_ERR_FILE)
+    ok_json = json_read(SAVE_OK_FILE_ANNOTATIONS)
+    err_json = json_read(SAVE_ERR_FILE_ANNOTATIONS)
 
     # add short_id_dict to ok_json
     ok_json = {

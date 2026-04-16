@@ -29,7 +29,8 @@ def cli():
 @cli.command()
 @click.argument(
     "datatype",
-    choices=click.Choice(["manifests", "annotations"])
+    type=click.Choice(["manifests", "annotations"]),
+    required=True
 )
 @click.option(
     "-r", "--retry",
@@ -39,6 +40,7 @@ def cli():
 @click.option(
     "-e", "--export-manifests",
     help="export manifests as well as annotations. has no effect if 'argument' is 'manifests'",
+    is_flag=True,
     type=click.BOOL,
     default=False
 )

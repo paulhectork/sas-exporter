@@ -108,7 +108,7 @@ class SasExporterAnnotations(SasExporterBase):
              since IIIF annotation targets have not been updated.
         """
         # 1. build a list of all canvas IDs to query
-        manifest = self.fetch_manifest(manifest_uri, to_file=self.export_manifests)
+        manifest = await self.fetch_manifest(manifest_uri, to_file=self.export_manifests)
 
         # NOTE: in some cases, this will raise a KeyError: in AIKON, a JSON is returned, but with the structure { "response": "...", "reason": "..." }
         # this is caused by a deleted witness.

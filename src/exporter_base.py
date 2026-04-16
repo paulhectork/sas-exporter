@@ -16,6 +16,7 @@ from .utils import (
     ANNOTATIONS_DIR,
     MANIFESTS_DIR,
     json_read_if_exists,
+    json_dumps,
     json_write,
     fetch_to_json,
     make_session,
@@ -82,9 +83,11 @@ class SasExporterBase():
     def load_save(self):
         ok_exists = None
         err_exists = None
-        if len(self.save_err_file):
+        self.save_ok_previous = {}
+        self.save_err_previous = {}
+        if Path(self.save_err_file).exists():
             self.save_err_previous, err_exists = json_read_if_exists(self.save_err_file)
-        if len(self.save_ok_file):
+        if Path(self.save_ok_file).exists():
             self.save_ok_previous, ok_exists = json_read_if_exists(self.save_ok_file)
 
         if ok_exists:
@@ -137,7 +140,6 @@ class SasExporterBase():
         for k, v in self.save_ok_previous.items():
             if k not in save_ok_data.keys():
                 save_ok_data[k] = v
-
         return save_ok_data, save_err_data
 
     def annotation_list_path(self, manifest_short_id: str) -> str|Path:
@@ -234,7 +236,7 @@ class SasExporterBase():
             err_obj["http_status"] = e.status  # pyright: ignore
         return err_obj
 
-    def pipeline_async(self):
+    async def pipeline_async(self):
         raise NotImplementedError("SasExporterBase.pipeline_async must be implemented by classes inheriting from SasExporterBase !")
 
     def pipeline(self) -> "SasExporterBase":

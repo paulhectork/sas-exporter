@@ -23,7 +23,12 @@ class SasExporterManifests(SasExporterBase):
 
     async def export_manifest(self, manifest_uri: str) -> "SasExporterManifests":
         try:
-            manifest = await self.fetch_manifest(manifest_uri, True)
+            await self.fetch_manifest(manifest_uri, True)
+            self.save_data[manifest_uri] = {
+                "path": str(self.manifest_path(self.manifest_uri_to_short_id(manifest_uri))),
+                "success": True
+            }
+
         except Exception as e:
             logger.error(
                 f"Failed to export manifest {manifest_uri}: {type(e).__name__}: {e}\n"
@@ -53,5 +58,5 @@ class SasExporterManifests(SasExporterBase):
 
 def export(retry: str|None):
     logger.info(f"RUNNING   : {STEP_NAME}")
-    SasExporterBase(retry).pipeline()
+    SasExporterManifests(retry).pipeline()
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
