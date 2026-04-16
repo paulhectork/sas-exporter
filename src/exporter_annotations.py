@@ -10,28 +10,19 @@ from typing import List, Dict, Tuple, Literal
 
 import aiohttp
 from tqdm.asyncio import tqdm_asyncio
-from yarl import URL
 
+from src.exporter_base import SasExporterBase
+from .logger import logger
 from .utils import (
     SAS_ENDPOINT,
     SAVE_OK_FILE,
-    OUT_DIR,
     ANNOTATIONS_DIR,
     SAVE_ERR_FILE,
-    MAX_CONNECTIONS,
     ANNOTATION_LIST_TEMPLATE,
-    IIIF_HOST_REPL,
-    TIMEOUT,
     EXPORT_STRATEGY,
-    json_dumps,
-    json_read_if_exists,
     json_write,
-    fetch_to_json,
-    make_session,
-    make_semaphore,
     manifest_uri_to_short_id
 )
-from .logger import logger
 
 STEP_NAME = "export"
 
@@ -50,91 +41,17 @@ def fix_next_page_url(url: str|None) -> str|None:
     return url
 
 
-class SasExporter():
-    save_ok_file: Path
+class SasExporterAnnotations(SasExporterBase):
     def __init__(self, retry: str|None):
-        # get and validate env variables
-
-        # get and validate retry
-        # if retry is specified, fetch previous errors and select only the
-        # ones with the valid "error_type" (and "http_satus", for HTTP errors)
-        # only manifests with these errors will be processed.
-        if retry is not None:
-            retry_mapper = {
-                "all": "all",
-                "http": "ClientResponseError",
-                "timeout": "SocketTimeoutError"
-            }
-            if re.match(r"^http:\d{3}$", retry):
-                retry, http_status = retry.split(":")
-                retry_filter = {
-                    "error_type": retry_mapper[retry],
-                    "http_status": int(http_status)
-                }
-            else:
-                retry_filter = { "error_type": retry_mapper[retry] }
-        else:
-            retry_filter = None
-
-        self.retry_filter = retry_filter
+        super().__init__(retry)
         self.strategy = EXPORT_STRATEGY
-        self.iiif_host_repl: None|Tuple[str,str] = IIIF_HOST_REPL
-        self.timeout = TIMEOUT
 
-        self.endpoint = SAS_ENDPOINT
         self.annotations_dir = ANNOTATIONS_DIR
-        self.out_dir = OUT_DIR
         self.save_ok_file = SAVE_OK_FILE
-        self.max_connections = MAX_CONNECTIONS
-        # successes at the previous iteration. { <manifest_uri>: { success: True, path: str } }
-        self.save_ok_previous, exists = json_read_if_exists(self.save_ok_file)
-
-        # NOTE: we overwrite contents of SAVE_ERR_FILE from 1 run to another:
-        # if retry_filter is None, we retry a download on every failed annotation list extraction.
-        # otherwise, we retry a download only on specific errors.
         self.save_err_file = SAVE_ERR_FILE
-        # errors at the previous iteration
-        self.save_err_previous, exists = json_read_if_exists(self.save_err_file)
 
-        # save_data for the curent iteration of the pipeline. in self.save_data, we don't separate between errors and success. this is done in the final export only.
-        self.save_data = {}
-        # list of manifests to download
-        self.manifests: List[str] = []
-
-        # HTTP client session
-        # defined in __aenter__ / closed in `__aexit__`
-        self._session: aiohttp.ClientSession | None = None
-        self.semaphore = make_semaphore(self.max_connections)
-
-        logger.info(f"Initiated SasExporter successfully (strategy={self.strategy}, iiif_host_repl={self.iiif_host_repl}, max_connections={self.max_connections}).")
-        if exists:
-            logger.info(f"Skipping {len(list(self.save_ok_previous.keys()))} pre-fetched manifests")
-        else:
-            logger.info(f"No pre-fetched manifests to load. Everything will be exported.")
-        return
-
-    # NOTE: defining __aenter__ / __aexit__ turns SasExporter into an async content manager.
-    # the advantage is that we can define 1 async context for the whole pipeline, thus
-    # sharing the same aiohttp.ClientSession for the whole pipeline, avoiding leaks and
-    # actually controlling the maximum number of parrallel queries run at once.
-    async def __aenter__(self) -> "SasExporter":
-        self._session = make_session(self.max_connections)
-        return self
-
-    async def __aexit__(self, *args) -> None:
-        if self._session:
-            await self._session.close()
-            self._session = None
-
-    @property
-    def session(self) -> aiohttp.ClientSession:
-        if self._session is None:
-            raise RuntimeError("SasExporter must be used as an async context manager")
-        return self._session
-
-    @property
-    def endpoint_manifests(self) -> str:
-        return f"{self.endpoint}/manifests"
+        logger.info(f"Initiated SasExporterAnnotations successfully (strategy={self.strategy}, iiif_host_repl={self.iiif_host_repl}, max_connections={self.max_connections}).")
+        self.load_save()
 
     def endpoint_annotations(self, manifest_short_id: str) -> str:
         # search-api endpoint returns all annotations for a manifest, paginated.
@@ -142,37 +59,6 @@ class SasExporter():
 
     def annotation_list_path(self, manifest_short_id: str) -> str|Path:
         return self.annotations_dir / f"{manifest_short_id}.json"
-
-    def write_annotation_list(self, data, fp: str|Path) -> "SasExporter":
-        json_write(data, fp)
-        return self
-
-    def write_save_data(self, save_ok_data:Dict, save_err_data:Dict) -> "SasExporter":
-        # NOTE: split self.save_data in 2 items: one with successful saves, one with errors.
-        # write both to file. in `self.fetch_annotations_from_manifest_uri`, if there's a DL error, path is set to None
-        json_write(save_ok_data, self.save_ok_file)
-        json_write(save_err_data, self.save_err_file)
-        return self
-
-    def prepare_save_data(self) -> Tuple[Dict, Dict]:
-        save_ok_data = {}
-        save_err_data = {}
-        # split save_data in 2: manifests that are ok, and those with errors.
-        for k, v in self.save_data.items():
-            if v["success"] is True:
-                save_ok_data[k] = v
-            else:
-                save_err_data[k] = v
-
-        # concatenate save_sata with self.saver_data_previous (data extracted at the previous iteration)
-        for k, v in self.save_ok_previous.items():
-            if k not in save_ok_data.keys():
-                save_ok_data[k] = v
-
-        return save_ok_data, save_err_data
-
-    async def fetch_to_json(self, url: str, params: Dict = {}) -> Dict|List:
-        return await fetch_to_json(self.semaphore, self.session, url, params)
 
     async def fetch_annotation_list_paginated(self, url: str) -> Dict:
         """
@@ -219,17 +105,15 @@ class SasExporter():
         - the IIIF manifest provider has changed its host (old.example.com has become new.example.com)
         - BUT those changes have not been reflected in SAS (manifests are still indexed using old.example.com)
         do:
-        1. fetch manifest using new IIIF host
+        1. fetch manifest using new IIIF host (done in SasExporterBase.fetch_manifest)
         2. build an index of canvases with the old IIIF host: the route /annotation/search will still use the old IIIF root,
              since IIIF annotation targets have not been updated.
         """
-        # replace old IIIF host (indexed in SAS but NOT accessible on our IIIF server) by new IIIF host.
-        if self.iiif_host_repl is not None:
-            manifest_uri = manifest_uri.replace(self.iiif_host_repl[0], self.iiif_host_repl[1])
-
-        manifest = await self.fetch_to_json(manifest_uri)
         # 1. build a list of all canvas IDs to query
+        manifest = self.fetch_manifest(manifest_uri)
+
         # NOTE: in some cases, this will raise a KeyError: in AIKON, a JSON is returned, but with the structure { "response": "...", "reason": "..." }
+        # this is caused by a deleted witness.
         canvas_uri_list = list(set(
             canvas["@id"]
             for canvas in manifest["sequences"][0]["canvases"]
@@ -258,19 +142,7 @@ class SasExporter():
         annotation_list["resources"] = annotation_array
         return annotation_list
 
-    async def fetch_manifests(self) -> "SasExporter":
-        manifests = []
-        collection = await self.fetch_to_json(self.endpoint_manifests)
-        manifests = [
-            m["@id"]
-            for m in collection["manifests"]  # pyright: ignore
-            if m["@type"] == "sc:Manifest"
-        ]
-        json_write(manifests, self.out_dir / "manifests_collection.json")
-        self.manifests = manifests
-        return self
-
-    async def fetch_annotations_from_manifest_uri(self, manifest_uri: str) -> "SasExporter":
+    async def fetch_annotations_from_manifest_uri(self, manifest_uri: str) -> "SasExporterAnnotations":
         """
         pipeline to download a single annotation_list
 
@@ -285,7 +157,7 @@ class SasExporter():
                 data = await self.fetch_annotations_with_search_api(manifest_short_id)
             else:
                 data = await self.fetch_annotations_with_search_canvas(manifest_uri) or {}
-            self.write_annotation_list(data, out_path)
+            json_write(data, out_path)
             self.save_data[manifest_uri] = {
                 "path": str(out_path),
                 "success": True
@@ -296,53 +168,11 @@ class SasExporter():
                 f"Failed to fetch annotations for manifest {manifest_uri}: {type(e).__name__}: {e}\n"
                 f"{traceback.format_exc()}"
             )
-            err_obj = {
-                "success": False,
-                "error_type": type(e).__name__
-            }
-            # build an error description
-            if hasattr(e, "message"):
-                err_obj["error_message"] = e.message  # pyright: ignore
-            if hasattr(e, "status"):
-                err_obj["http_status"] = e.status  # pyright: ignore
-            self.save_data[manifest_uri] = err_obj
+            self.save_data[manifest_uri] = self.make_err_obj(e)
         return self
 
-    async def fetch_annotations(self) -> "SasExporter":
-        # skip successfully downloaded manifests
-        if not self.retry_filter:
-            manifests_to_download = [
-                m for m in self.manifests
-                if m not in self.save_ok_previous.keys()
-            ]
-        # expand retry_filter to re-export only certain failed manifests
-        else:
-            # if 'all', redownload all failures
-            if self.retry_filter["error_type"] == "all":
-                manifests_to_download = [
-                    m for m in self.manifests
-                    if m in self.save_err_previous.keys()
-                ]
-            # filter for a specific http status
-            elif "http_status" in self.retry_filter.keys():
-                manifests_to_download = []
-                for err_m, err_obj in self.save_err_previous.items():
-                    if (
-                        err_m in self.manifests
-                        and "http_status" in err_obj.keys()
-                        and int(err_obj["http_status"]) == int(self.retry_filter["http_status"])
-                    ):
-                        manifests_to_download.append(err_m)
-            # otherwise, self.retry_filter["error_type"] contains a value
-            # of the "error_type" key in save_err_previous.values()
-            else:
-                manifests_to_download = [
-                    m
-                    for m in self.manifests
-                    if m in self.save_err_previous.keys()
-                    and self.save_err_previous[m]["error_type"] == self.retry_filter["error_type"]
-                ]
-
+    async def fetch_annotations(self) -> "SasExporterAnnotations":
+        manifests_to_download = self.apply_retry_filter()
         logger.info(f"Fetching annotations for {len(manifests_to_download)} manifests.")
 
         # NOTE: parrallelization and asyncio.gather:
@@ -365,6 +195,7 @@ class SasExporter():
                 desc=f"Downloading annotation lists"
             )
         else:
+            # non-parrallelized outer loop. we create a small progress tracker
             time = None
             total = len(manifests_to_download)
             calc_timedelta = lambda t: timedelta(seconds=round(t,0))  # t: int = time in seconds
@@ -389,27 +220,15 @@ class SasExporter():
 
         return self
 
-    async def pipeline_async(self) -> "SasExporter":
+    async def pipeline_async(self) -> "SasExporterAnnotations":
         # this wraps the pipeline in an async context manager, with a sincle client session.
         async with self:
-            logger.info(f"Exporting data from '{SAS_ENDPOINT}'")
-            logger.info("Fetching all indexed manifests.")
             await self.fetch_manifests()
             logger.info(f"Found {len(self.manifests)} manifests for which to extract annotations.")
             await self.fetch_annotations()
-            logger.info(f"Finished fetching annotations.")
-        return self
-
-    def pipeline(self) -> "SasExporter":
-        try:
-            asyncio.run(self.pipeline_async())
-        finally:
-            save_ok_data, save_err_data = self.prepare_save_data()
-            logger.info(f"Exporting data (success: {len(save_ok_data.keys())}, error: {len(save_err_data)}).")
-            self.write_save_data(save_ok_data, save_err_data)
         return self
 
 def export(retry: str|None):
     logger.info(f"RUNNING   : {STEP_NAME}")
-    SasExporter(retry).pipeline()
+    SasExporterAnnotations(retry).pipeline()
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
