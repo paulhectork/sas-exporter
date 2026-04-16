@@ -44,16 +44,15 @@ class SasExporterAnnotations(SasExporterBase):
         super().__init__(retry)
         self.strategy = EXPORT_STRATEGY
 
-        self.save_ok_file = SAVE_OK_FILE_ANNOTATIONS
-        self.save_err_file = SAVE_ERR_FILE_ANNOTATIONS
-
         if export_manifests and not self.strategy == "canvas":
             logger.error(f"export_manifests can only be used if `EXPORT_STRATEGY=='canvas'`. exiting !")
             exit(1)
         self.export_manifests = bool(export_manifests)
 
-        logger.info(f"Initiated SasExporterAnnotations successfully (strategy={self.strategy}, iiif_host_repl={self.iiif_host_repl}, max_connections={self.max_connections}).")
+        self.save_ok_file = SAVE_OK_FILE_ANNOTATIONS
+        self.save_err_file = SAVE_ERR_FILE_ANNOTATIONS
         self.load_save()
+        logger.info(f"Initiated SasExporterAnnotations successfully (strategy={self.strategy}, iiif_host_repl={self.iiif_host_repl}, max_connections={self.max_connections}).")
 
     def endpoint_annotations(self, manifest_short_id: str) -> str:
         # search-api endpoint returns all annotations for a manifest, paginated.

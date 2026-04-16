@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Tuple, Dict, List
 
 import aiohttp
-from tqdm.asyncio import tqdm_asyncio
 
 from src.utils import json_read_if_exists
 
@@ -70,6 +69,7 @@ class SasExporterBase():
         self.manifests: List[str] = []
 
         # save_ok_file and save_err_file are defined by inheriting classes.
+        # there is 1 save_(ok|err)_file per annotation.
         # NOTE: we overwrite contents of SAVE_ERR_FILE from 1 run to another:
         # if retry_filter is None, we retry a download on every failed annotation list extraction.
         # otherwise, we retry a download only on specific errors.
