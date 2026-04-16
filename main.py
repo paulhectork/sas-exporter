@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()  # NOTE: necessary to load .env before importing variables relying on the env !
 
 from src.logger import logger
-from src.exporter import export as run_export
+from src.exporter_annotations import export as run_export_annotations
+from src.exporter_manifests import export as run_export_manifests
 from src.test_pagination import test_pagination as run_test_pagination
 from src.clean_manifest_errors import clean_manifest_errors as run_clean_manifest_errors
 from src.migrate_structure import migrate_structure as run_migrate_structure
@@ -26,17 +27,35 @@ def cli():
     logger.info("*" * 50)
 
 @cli.command()
+@click.argument(
+    "datatype",
+    choices=click.Choice(["manifests", "annotations"])
+)
 @click.option(
     "-r", "--retry",
     help=f"retry exports for manifests that failed at a previous fetch for a specific error type",
-    callback=export_retry_validator
+    callback=export_retry_validator,
 )
-def export(retry: str|None):
+@click.option(
+    "-e", "--export-manifests",
+    help="export manifests as well as annotations. has no effect if 'argument' is 'manifests'",
+    type=click.BOOL,
+    default=False
+)
+def export(
+    datatype: Literal["manifests","annotations"],
+    retry: str|None,
+    export_manifests: bool = False
+):
     """
-    export all annotations from an SAS endpoint
+    \b
+    export data:
+    - if 'argument' is 'annotations', export all annotations from an SAS endpoint
+    - if 'argument' is 'manifests', export all manifests indexed in an SAS endpoint
+        (i.e., manifests mentionned in $SAS_ENDPOINT/manifests/)
 
     \b
-    if "-r" "--retry" is specified, only attempt to download annotations
+    if "-r" "--retry" is specified, only attempt to download data
     for manifests that failed at a previous step. possible values or retry are:
     - "all" (refetch for all errors),
     - "timeout" (refetch for timeout errors),
@@ -48,7 +67,10 @@ def export(retry: str|None):
     have not been reflected in your SAS, use the EXPORT_STRATEGY and IIIF_HOST_REPL
     env variables (and see their doc in .env.template).
     """
-    run_export(retry)
+    if datatype == "annotations":
+        run_export_annotations(retry, export_manifests)
+    else:
+        run_export_manifests(retry)
 
 @cli.command()
 def test_pagination():
