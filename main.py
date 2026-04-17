@@ -1,6 +1,7 @@
 import re
 import textwrap
-from typing import Literal, Function
+import functools
+from typing import Literal, Callable
 
 import click
 from dotenv import load_dotenv
@@ -22,20 +23,27 @@ def export_retry_validator(ctx, param, value):
         exit(1)
     return value
 
-def datatype_argument(function: Function) -> Function:
-    function = click.argument(
+
+# commonly shared argument to define a datatype. https://stackoverflow.com/a/70852267
+def datatype_argument(func: Callable) -> Callable:
+    @click.argument(
         "datatype",
         type=click.Choice(["manifests", "annotations"]),
         required=True
     )
-    return function
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
+
 
 @click.group()
 def cli():
     logger.info("*" * 50)
 
+
 @cli.command()
-@datatype_argument()
+@datatype_argument
 @click.option(
     "-r", "--retry",
     help=f"retry exports for manifests that failed at a previous fetch for a specific error type",
@@ -78,6 +86,7 @@ def export(
     else:
         run_export_manifests(retry)
 
+
 @cli.command()
 def test_pagination():
     """
@@ -87,6 +96,7 @@ def test_pagination():
     paginated AnnotationLists into a single AnnotationList worked
     """
     run_test_pagination()
+
 
 @cli.command()
 def clean_manifest_error():
@@ -100,6 +110,7 @@ def clean_manifest_error():
     """
     run_clean_manifest_errors()
 
+
 @cli.command()
 def migrate_structure():
     """
@@ -107,8 +118,9 @@ def migrate_structure():
     """
     run_migrate_structure()
 
+
 @cli.command()
-@datatype_argument()
+@datatype_argument
 def output_analysis(datatype: Literal["manifests","annotations"]):
     """
     after an export, get a summary of the export (results, errors)...

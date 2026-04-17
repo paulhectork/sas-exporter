@@ -5,6 +5,8 @@ from .utils import (
     SAS_ENDPOINT,
     SAVE_OK_FILE_ANNOTATIONS,
     SAVE_ERR_FILE_ANNOTATIONS,
+    SAVE_OK_FILE_MANIFESTS,
+    SAVE_ERR_FILE_MANIFESTS,
     OUT_DIR,
     EXPORT_STRATEGY,
     json_dumps,
@@ -77,7 +79,7 @@ def get_alt_matches(match_for: Literal["500", "KeyError"], errors: list[dict], o
         f"no_{key}_matches": no_alt_matches
     }
 
-def pipeline(datatyoe: Literal["annotation", "manifest"]):
+def pipeline(datatype: Literal["annotations", "manifests"]):
     """
     1. get each error and count # or errors
     2, for ClientResponseError, get each HTTP error and # for each
@@ -87,8 +89,8 @@ def pipeline(datatyoe: Literal["annotation", "manifest"]):
     4. 500 errors should be caused by a deleted digitization
           => see if there's a matching witness for the manifestShortId
     """
-    ok_json = json_read(SAVE_OK_FILE_ANNOTATIONS if datatype === "annotation" else SAVE_OK_FILE_MANIFESTS)
-    err_json = json_read(SAVE_ERR_FILE_ANNOTATIONS if datatype === "annotation" else SAVE_ERR_FILE_MANIFESTS)
+    ok_json = json_read(SAVE_OK_FILE_ANNOTATIONS if datatype == "annotations" else SAVE_OK_FILE_MANIFESTS)
+    err_json = json_read(SAVE_ERR_FILE_ANNOTATIONS if datatype == "annotations" else SAVE_ERR_FILE_MANIFESTS)
 
     # add short_id_dict to ok_json
     ok_json = {
@@ -100,6 +102,7 @@ def pipeline(datatyoe: Literal["annotation", "manifest"]):
     }
 
     out = {
+        "export_type": datatype,
         "endpoint": SAS_ENDPOINT,
         "strategy": EXPORT_STRATEGY,
         "ok_count": len(ok_json.keys()),
@@ -158,7 +161,7 @@ def pipeline(datatyoe: Literal["annotation", "manifest"]):
     json_write(out, OUT_DIR / "output_analysis.json")
 
 
-def output_analysis(datatype: Literal["annotation","manifest"]):
+def output_analysis(datatype: Literal["annotations","manifests"]):
     logger.info(f"RUNNING   : {STEP_NAME}")
     pipeline(datatype)
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
