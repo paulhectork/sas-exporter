@@ -179,9 +179,8 @@ class SasExporterAnnotations(SasExporterBase):
         # - if self.strategy==canvas, DO NOT use asyncio.gather on
         #       `fetch_annotations_from_manifest_uri`:
         #       there is a nested asyncio.gather (1 request/canvas), which
-        #       will cause runtime errors (the queue is occupied entierly by
-        #       fetching manifests and the requests for fetching annotations
-        #       are queued up but never run before a timeout)
+        #       will cause runtime errors: the asyncio queue is filled with
+        #       `n_manifests x n_canvas` pending jobs, which WILL cause timeouts.
         if (self.strategy != "canvas"):
             tasks = [
                 self.fetch_annotations_from_manifest_uri(m_uri)

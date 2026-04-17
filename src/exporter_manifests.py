@@ -1,6 +1,7 @@
 import traceback
 
-from tqdm.asyncio import tqdm_asyncio
+from tqdm import tqdm
+import asyncio
 
 from .exporter_base import SasExporterBase
 from .logger import logger
@@ -45,15 +46,27 @@ class SasExporterManifests(SasExporterBase):
             manifests_to_download = self.apply_retry_filter()
             logger.info(f"Fetching {len(manifests_to_download)} manifests.")
 
-            tasks = [
-                self.export_manifest(m_uri)
-                for m_uri in manifests_to_download
-            ]
-            await tqdm_asyncio.gather(
-                *tasks,
-                total=len(manifests_to_download),
-                desc="Downloading manifests"
-            )
+            queue = asyncio.Queue()
+            for m_uri in manifests_to_download:
+                await queue.put(m_uri)
+
+            progress = tqdm(total=len(manifests_to_download), desc="downloading manifests")
+
+            async def worker():
+                while True:
+                    try:
+                        m_uri = queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    await self.export_manifest(m_uri)
+                    progress.update(1)
+                    queue.task_done()
+
+            # spawn exactly MAX_CONNECTIONS workers — no more coroutines in flight
+            workers = [asyncio.create_task(worker()) for _ in range(self.max_connections)]
+            await asyncio.gather(*workers)
+            progress.close()
+
         return self
 
 def export(retry: str|None):

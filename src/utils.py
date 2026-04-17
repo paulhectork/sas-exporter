@@ -120,7 +120,6 @@ def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
         )
     )
 
-
 # retry 5 times, waiting 1-5 seconds between each
 @tenacity.retry(
     retry=tenacity.retry_if_exception_type(aiohttp.ClientResponseError),
@@ -128,15 +127,22 @@ def make_session(max_connections: int = 10) -> aiohttp.ClientSession:
     wait=tenacity.wait_exponential(multiplier=1, min=1, max=5),
     reraise=True  # if it still fails, raise the original error instead of tenacity.RetryError.
 )
-async def fetch_to_json(semaphore: asyncio.Semaphore, session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:
-    """
-    must be run in an `async with aiohttp.ClientSession(...) as session` block:
-    """
-    async with semaphore:
-        async with session.get(url, params=params) as response:
+async def fetch_with_retry(session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:
+    async with session.get(url, params=params) as response:
             response.raise_for_status()
             r_text = await response.text()
     return json_parse(r_text)
+
+
+async def fetch_to_json(semaphore: asyncio.Semaphore, session: aiohttp.ClientSession, url: str, params: Dict = {}) -> Dict|List:
+    """
+    must be run in an `async with aiohttp.ClientSession(...) as session` block:
+    NOTE: we split fetch_to_json and fetch_with_retry so that `tenacity.retry`
+        can be INSIDE the semaphore block. otherwise, the retry requests will
+        create more requests than what the semaphore defines.
+    """
+    async with semaphore:
+        return await fetch_with_retry(session, url, params)
 
 
 strategy = os.getenv("EXPORT_STRATEGY")
