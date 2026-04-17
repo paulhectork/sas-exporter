@@ -1,6 +1,6 @@
 import re
 import textwrap
-from typing import Literal
+from typing import Literal, Function
 
 import click
 from dotenv import load_dotenv
@@ -22,16 +22,20 @@ def export_retry_validator(ctx, param, value):
         exit(1)
     return value
 
+def datatype_argument(function: Function) -> Function:
+    function = click.argument(
+        "datatype",
+        type=click.Choice(["manifests", "annotations"]),
+        required=True
+    )
+    return function
+
 @click.group()
 def cli():
     logger.info("*" * 50)
 
 @cli.command()
-@click.argument(
-    "datatype",
-    type=click.Choice(["manifests", "annotations"]),
-    required=True
-)
+@datatype_argument()
 @click.option(
     "-r", "--retry",
     help=f"retry exports for manifests that failed at a previous fetch for a specific error type",
@@ -104,11 +108,17 @@ def migrate_structure():
     run_migrate_structure()
 
 @cli.command()
-def output_analysis():
+@datatype_argument()
+def output_analysis(datatype: Literal["manifests","annotations"]):
     """
     after an export, get a summary of the export (results, errors)...
+
+    \b
+    argument <datatype> defines which output to analyse:
+    - manifest: output of manifest extraction
+    - annotation: output of annotation extraction
     """
-    run_output_analysis()
+    run_output_analysis(datatype)
 
 
 if __name__ == "__main__":

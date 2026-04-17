@@ -77,7 +77,7 @@ def get_alt_matches(match_for: Literal["500", "KeyError"], errors: list[dict], o
         f"no_{key}_matches": no_alt_matches
     }
 
-def pipeline():
+def pipeline(datatyoe: Literal["annotation", "manifest"]):
     """
     1. get each error and count # or errors
     2, for ClientResponseError, get each HTTP error and # for each
@@ -87,8 +87,8 @@ def pipeline():
     4. 500 errors should be caused by a deleted digitization
           => see if there's a matching witness for the manifestShortId
     """
-    ok_json = json_read(SAVE_OK_FILE_ANNOTATIONS)
-    err_json = json_read(SAVE_ERR_FILE_ANNOTATIONS)
+    ok_json = json_read(SAVE_OK_FILE_ANNOTATIONS if datatype === "annotation" else SAVE_OK_FILE_MANIFESTS)
+    err_json = json_read(SAVE_ERR_FILE_ANNOTATIONS if datatype === "annotation" else SAVE_ERR_FILE_MANIFESTS)
 
     # add short_id_dict to ok_json
     ok_json = {
@@ -158,7 +158,7 @@ def pipeline():
     json_write(out, OUT_DIR / "output_analysis.json")
 
 
-def output_analysis():
+def output_analysis(datatype: Literal["annotation","manifest"]):
     logger.info(f"RUNNING   : {STEP_NAME}")
-    pipeline()
+    pipeline(datatype)
     logger.info(f"COMPLETED : {STEP_NAME} (* ´ ▽ ` *)")
