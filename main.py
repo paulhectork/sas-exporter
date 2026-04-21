@@ -12,7 +12,7 @@ from src.exporter_annotations import export as run_export_annotations
 from src.exporter_manifests import export as run_export_manifests
 from src.test_pagination import test_pagination as run_test_pagination
 from src.clean_manifest_errors import clean_manifest_errors as run_clean_manifest_errors
-from src.migrate_structure import migrate_structure as run_migrate_structure
+from src.migrate import migrate as run_migrate
 from src.output_analysis import output_analysis as run_output_analysis
 
 export_retry_help_values = "one of: 'all'|'timeout'|'http'|'http:XXX, where '*' means retry all errors and 'XXX' is an HTTP error code"
@@ -112,11 +112,12 @@ def clean_manifest_error():
 
 
 @cli.command()
-def migrate_structure():
+@datatype_argument
+def migrate(datatype: Literal["annotations", "manifests"]):
     """
     aikon-specific process to migrate annotation structure (mostly update annotation targets)
     """
-    run_migrate_structure()
+    run_migrate(datatype)
 
 
 @cli.command()

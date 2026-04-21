@@ -8,8 +8,8 @@ AIKON-SPECIFIC JSON structure migration script:
       - annotations are done directly on the digitization and not on the regions.
       - the precise regions extraction ID is referenced as a tag in the annotation
 
-=> this script updates annotations with the OLD structure to annotations with the NEW structure.
-it also does some other minor changes.
+=> this script updates annotations and manifests with the OLD structure to annotations
+with the NEW structure. it also does some other minor changes.
 """
 import re
 from pathlib import Path
@@ -23,12 +23,13 @@ from .utils import (
     OUT_DIR,
     make_path,
     json_read_from_dir,
-    json_write
+    json_write,
+    json_dumps
 )
 from .logger import logger
 
 
-STEP_NAME = "migrate_structure"
+STEP_NAME = "migrate"
 
 
 regex_short_id = re.compile(r"^(wit\d+_[a-z]+\d+)_anno\d+$")
@@ -140,7 +141,7 @@ def update_target_recursive(target: Any, inner: bool = False):
         target = [ r[0] for r in result]
         # we expect that all values of annotation.on target the same manifest,
         # and so only extract the 1st target short ID.
-        old_short_id = result[0][0]
+        old_short_id = result[0][1]
     else:
         raise TypeError(f"only supported types are 'str', 'dict', 'list'. got {type(target)}")
 
@@ -164,9 +165,12 @@ def update_annotation(annotation: Dict):
     else:
         body = [tag]
 
-    # 3. drop the "$root_url/sas/full_text" key from body (auto-generated in SAS, useless in aiiinotate)
+    # 3. drop empty bodies
+    #   and drop the "$root_url/sas/full_text" key from body (auto-generated in SAS, useless in aiiinotate)
     body_out = []
     for item in body:
+        if not len(item["chars"]) or item["chars"] == "<p></p>":
+            continue
         k_list = [ k for k in item.keys() if k.endswith("/sas/full_text") ]
         for k in k_list:
             del item[k]
@@ -176,7 +180,7 @@ def update_annotation(annotation: Dict):
     return annotation
 
 
-def pipeline():
+def pipeline(datatype: Literal["annotations","manifests"]):
     out_dir = OUT_DIR / f"{ANNOTATIONS_DIR.name}_{STEP_NAME}"
     make_path(out_dir, is_dir=True)
 
@@ -198,7 +202,7 @@ def pipeline():
     return
 
 
-def migrate_structure():
+def migrate(datatype: Literal["annotations","manifests"]):
     logger.info(f"RUNNING: {STEP_NAME}")
-    pipeline()
+    pipeline(datatype)
     logger.info(f"COMPLETED: {STEP_NAME}  (* ´ ▽ ` *)")

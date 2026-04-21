@@ -158,7 +158,7 @@ def pipeline(datatype: Literal["annotations", "manifests"]):
         out["err_desc"]["errors"].append(err_desc)
 
     print(json_dumps(out).decode("utf-8"))
-    json_write(out, OUT_DIR / "output_analysis.json")
+    json_write(out, OUT_DIR / f"output_analysis_{datatype}.json")
 
 
 def output_analysis(datatype: Literal["annotations","manifests"]):
