@@ -102,6 +102,7 @@ def update_iiif_uri(iiif_uri) -> Tuple[str,str]:
     iiif_uri = f"{uri_base}/{uri_tail}"
     return make_iiif_host_repl(iiif_uri), old_short_id
 
+update_obj_id = lambda resource: update_iiif_uri(resource["@id"])[0]
 
 # -------------------------------------------------------------
 # ANNOTATIONS
@@ -152,9 +153,10 @@ def update_target_recursive(target: Any, inner: bool = False):
     return target, old_short_id
 
 def update_annotation(annotation: Dict):
-    target = annotation.get("on")
+    annotation["@id"] = ""  # aiiinotate recreates an @id
 
     # 1. update the annotation.on
+    target = annotation.get("on")
     target, old_short_id = update_target_recursive(target, False)
     annotation["on"] = target
 
@@ -193,8 +195,6 @@ def update_annotation_list(annotation_list: Dict) -> Dict:
 
 # -------------------------------------------------------------
 # MANIFESTS
-
-update_obj_id = lambda resource: update_iiif_uri(resource["@id"])[0]
 
 def update_image(image: Dict) -> Dict:
     image["@id"] = update_obj_id(image)
