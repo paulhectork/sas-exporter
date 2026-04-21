@@ -20,6 +20,7 @@ from tqdm import tqdm
 from .utils import (
     ANNOTATIONS_DIR,
     IIIF_HOST_REPL,
+    MANIFESTS_DIR,
     OUT_DIR,
     make_path,
     json_read_from_dir,
@@ -31,6 +32,8 @@ from .logger import logger
 
 STEP_NAME = "migrate"
 
+# -------------------------------------------------------------
+# UTILS
 
 regex_short_id = re.compile(r"^(wit\d+_[a-z]+\d+)_anno\d+$")
 def update_short_id(short_id: str) -> str:
@@ -101,6 +104,10 @@ def update_iiif_uri(iiif_uri, uri_type: Literal["canvas", "manifest"]) -> Tuple[
     uri_base, new_short_id, old_short_id = update_iiif_base_uri(uri_base)
     iiif_uri = f"{uri_base}/{uri_tail}"
     return make_iiif_host_repl(iiif_uri), old_short_id
+
+
+# -------------------------------------------------------------
+# ANNOTATIONS
 
 def update_dict_target(target: dict) -> Tuple[dict, str]:
     """
@@ -180,25 +187,42 @@ def update_annotation(annotation: Dict):
     return annotation
 
 
+def update_annotation_list(annotation_list: Dict) -> Dict:
+    annotation_array = []
+    for annotation in annotation_list.get("resources", []):
+        annotation_array.append(update_annotation(annotation))
+    annotation_list["resources"] = annotation_array
+    return annotation_list
+
+# -------------------------------------------------------------
+# MANIFESTS
+
+def update_manifest(manifest: Dict) -> Dict:
+    return manifest
+
+# -------------------------------------------------------------
+# PIPELINE
+
 def pipeline(datatype: Literal["annotations","manifests"]):
-    out_dir = OUT_DIR / f"{ANNOTATIONS_DIR.name}_{STEP_NAME}"
+    indir = ANNOTATIONS_DIR if datatype == "annotations" else MANIFESTS_DIR
+    out_dir = OUT_DIR / f"{indir.name}_{STEP_NAME}"
     make_path(out_dir, is_dir=True)
 
     # update each AnnotationList and write to file
-    for fp, annotation_list in tqdm(
-        json_read_from_dir(ANNOTATIONS_DIR),
-        desc="updating annotations",
-        total=len(list(ANNOTATIONS_DIR.iterdir()))
+    for fp, data in tqdm(
+        json_read_from_dir(indir),
+        desc=f"updating {datatype}",
+        total=len(list(indir.iterdir()))
     ):
         fn = Path(fp).name
         fp_out = out_dir / fn
-        annotation_array = []
 
-        for annotation in annotation_list.get("resources", []):
-            annotation_array.append(update_annotation(annotation))
-        annotation_list["resources"] = annotation_array
+        if datatype == "annotations":
+            data = update_annotation_list(data)
+        else:
+            data = update_manifest(data)
 
-        json_write(annotation_list, fp_out)
+        json_write(data, fp_out)
     return
 
 
