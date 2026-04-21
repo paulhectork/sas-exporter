@@ -10,26 +10,27 @@ from .utils import (
     MANIFESTS_DIR,
     ANNOTATIONS_MIGRATE_DIR,
     MANIFESTS_MIGRATE_DIR,
-    IIIF_HOST_REPL,
-    OUT_DIR,
-    make_path,
     json_read_from_dir,
-    json_write,
     json_dumps
 )
 from .logger import logger
 
+
 STEP_NAME = "anno2mani"
+
 
 regex_short_id = re.compile(r"wit\d+_[a-z]+\d+(_anno\d+)?")
 get_short_id = lambda s: regex_short_id.search(s)[0]  # pyright: ignore
 
+
 # deduplicate a list
 dedup = lambda l: list(set(l))
+
 
 # flatten a list. non-recursive => limited depth.
 # signature: List[List[Any]] -> List[Any]
 flatten = lambda xss: [ x for xs in xss for x in xs ]
+
 
 def target_to_short_ids(target: List|Dict|str) -> List[str]:
     target = target if isinstance(target, list) else [target]
@@ -40,6 +41,7 @@ def target_to_short_ids(target: List|Dict|str) -> List[str]:
         elif isinstance(t, dict):
             target_short_ids.append(get_short_id(t["full"]))
     return target_short_ids
+
 
 def pipeline(step: Literal["pre-migrate","post-migrate"]):
     indir_annotations = ANNOTATIONS_DIR if step=="pre-migrate" else ANNOTATIONS_MIGRATE_DIR
@@ -68,8 +70,8 @@ def pipeline(step: Literal["pre-migrate","post-migrate"]):
         if "@id" in manifest.keys()
     ])
 
-    # 3. compare
     # TODO less ugly output / save to file
+    # 3. compare
     missing_manifests_short_ids = [
         short_id
         for short_id in annotation_manifest_short_ids
@@ -80,6 +82,8 @@ def pipeline(step: Literal["pre-migrate","post-migrate"]):
         print(json_dumps(missing_manifests_short_ids).decode())
     else:
         print("All annotations have a corresponding manifest !")
+    return
+
 
 def anno2mani(step: Literal["pre-migrate","post-migrate"]):
     logger.info(f"RUNNING: {STEP_NAME}")

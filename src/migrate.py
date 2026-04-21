@@ -23,11 +23,8 @@ from .utils import (
     ANNOTATIONS_MIGRATE_DIR,
     MANIFESTS_MIGRATE_DIR,
     IIIF_HOST_REPL,
-    OUT_DIR,
-    make_path,
     json_read_from_dir,
     json_write,
-    json_dumps
 )
 from .logger import logger
 
