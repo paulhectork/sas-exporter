@@ -19,8 +19,10 @@ from tqdm import tqdm
 
 from .utils import (
     ANNOTATIONS_DIR,
-    IIIF_HOST_REPL,
     MANIFESTS_DIR,
+    ANNOTATIONS_MIGRATE_DIR,
+    MANIFESTS_MIGRATE_DIR,
+    IIIF_HOST_REPL,
     OUT_DIR,
     make_path,
     json_read_from_dir,
@@ -237,8 +239,7 @@ def update_manifest(manifest: Dict) -> Dict|None:
 
 def pipeline(datatype: Literal["annotations","manifests"]):
     indir = ANNOTATIONS_DIR if datatype == "annotations" else MANIFESTS_DIR
-    out_dir = OUT_DIR / f"{indir.name}_{STEP_NAME}"
-    make_path(out_dir, is_dir=True)
+    outdir = ANNOTATIONS_MIGRATE_DIR if datatype == "annotations" else MANIFESTS_MIGRATE_DIR
 
     # update each AnnotationList and write to file
     for fp, data in tqdm(
@@ -259,7 +260,7 @@ def pipeline(datatype: Literal["annotations","manifests"]):
                 fn = f"{data['@id'].split('/')[-2]}.json"
 
         if data is not None:
-            fp_out = out_dir / fn
+            fp_out = outdir / fn
             json_write(data, fp_out)
     return
 

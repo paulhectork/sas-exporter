@@ -14,6 +14,7 @@ from src.test_pagination import test_pagination as run_test_pagination
 from src.clean_manifest_errors import clean_manifest_errors as run_clean_manifest_errors
 from src.migrate import migrate as run_migrate
 from src.output_analysis import output_analysis as run_output_analysis
+from src.anno2mani import anno2mani as run_anno2mani
 
 export_retry_help_values = "one of: 'all'|'timeout'|'http'|'http:XXX, where '*' means retry all errors and 'XXX' is an HTTP error code"
 
@@ -62,8 +63,9 @@ def export(
     export_manifests: bool = False
 ):
     """
+    export data from a live SAS instance
+
     \b
-    export data:
     - if 'argument' is 'annotations', export all annotations from an SAS endpoint
     - if 'argument' is 'manifests', export all manifests indexed in an SAS endpoint
         (i.e., manifests mentionned in $SAS_ENDPOINT/manifests/)
@@ -115,7 +117,7 @@ def clean_manifest_error():
 @datatype_argument
 def migrate(datatype: Literal["annotations", "manifests"]):
     """
-    aikon-specific process to migrate annotation structure (mostly update annotation targets)
+    aikon-specific process to migrate data structures
     """
     run_migrate(datatype)
 
@@ -124,7 +126,7 @@ def migrate(datatype: Literal["annotations", "manifests"]):
 @datatype_argument
 def output_analysis(datatype: Literal["manifests","annotations"]):
     """
-    after an export, get a summary of the export (results, errors)...
+    get a summary of an export: results, errors
 
     \b
     argument <datatype> defines which output to analyse:
@@ -133,6 +135,20 @@ def output_analysis(datatype: Literal["manifests","annotations"]):
     """
     run_output_analysis(datatype)
 
+@cli.command()
+@click.argument("step", type=click.Choice(["pre-migrate", "post-migrate"]), required=True)
+def anno2mani(step: Literal["pre-migrate","post-migrate"]):
+    """
+    check that annotations are mappable to manifests
+
+    after exporting manifests and annotations, check the target of each
+    annotation to ensure it can be mapped to an exported manifest
+
+    \b
+    - use step="pre-migrate" to check annotations before running "migrate"
+    - use step="post-migrate" to check annotations after running "migrate"
+    """
+    run_anno2mani(step)
 
 if __name__ == "__main__":
     cli()
