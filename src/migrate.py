@@ -247,14 +247,19 @@ def pipeline(datatype: Literal["annotations","manifests"]):
         total=len(list(indir.iterdir()))
     ):
         fn = Path(fp).name
-        fp_out = out_dir / fn
 
         if datatype == "annotations":
             data = update_annotation_list(data)
         else:
             data = update_manifest(data)
+            # to avoid duplicate manifests, update file basename
+            # to new short ID => deduplicate when there are multiple
+            # region IDs for the same manifest
+            if data is not None:
+                fn = f"{data['@id'].split('/')[-2]}.json"
 
         if data is not None:
+            fp_out = out_dir / fn
             json_write(data, fp_out)
     return
 
