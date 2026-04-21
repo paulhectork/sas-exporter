@@ -87,20 +87,17 @@ def make_iiif_host_repl(s:str) -> str:
         return s.replace(IIIF_HOST_REPL[0], IIIF_HOST_REPL[1])
     return s
 
-regex_canvas_split = re.compile(r"\/(?=canvas)")
-regex_manifest_split = re.compile(r"\/(?=manifest.json)")
-def update_iiif_uri(iiif_uri, uri_type: Literal["canvas", "manifest"]) -> Tuple[str,str]:
+regex_split = re.compile(r"\/((?=manifest)|(?=sequence)|(?=canvas)|(?=annotation))")
+def update_iiif_uri(iiif_uri) -> Tuple[str,str]:
     """
+    allowed URIs: manifest URIs, sequence URIs, canvas URIs, image URIs
+
     replacements to a IIIF URI are:
     - update the IIIF host if needed
     - remove "/v2/" (useless since all annotations are directly on the digitization, not on the region)
     - update the IIIF short ID (remove the region_id part)
     """
-    if uri_type == "canvas":
-        splitter = regex_canvas_split
-    else:
-        splitter = regex_manifest_split
-    uri_base, uri_tail = splitter.split(iiif_uri)
+    uri_base, _, uri_tail = regex_split.split(iiif_uri)
     uri_base, new_short_id, old_short_id = update_iiif_base_uri(uri_base)
     iiif_uri = f"{uri_base}/{uri_tail}"
     return make_iiif_host_repl(iiif_uri), old_short_id
@@ -124,15 +121,15 @@ def update_dict_target(target: dict) -> Tuple[dict, str]:
         }
         target["within"] = within
 
-    manifest_uri, old_short_id = update_iiif_uri(target["within"]["@id"], "manifest")
-    canvas_uri, _ = update_iiif_uri(target["full"], "canvas")
+    manifest_uri, old_short_id = update_iiif_uri(target["within"]["@id"])
+    canvas_uri, _ = update_iiif_uri(target["full"])
     target["within"]["@id"] = manifest_uri
     target["full"] = canvas_uri
     return target, old_short_id
 
 def update_target_recursive(target: Any, inner: bool = False):
     if isinstance(target, str):
-        target, old_short_id = update_iiif_uri(target, "canvas")
+        target, old_short_id = update_iiif_uri(target)
     elif isinstance(target, dict):
         target, old_short_id = update_dict_target(target)
     elif isinstance(target, list):
@@ -197,7 +194,42 @@ def update_annotation_list(annotation_list: Dict) -> Dict:
 # -------------------------------------------------------------
 # MANIFESTS
 
-def update_manifest(manifest: Dict) -> Dict:
+update_obj_id = lambda resource: update_iiif_uri(resource["@id"])[0]
+
+def update_image(image: Dict) -> Dict:
+    image["@id"] = update_obj_id(image)
+    image["on"] = update_iiif_uri(image["on"])[0]
+    return image
+
+
+def update_canvas(canvas: Dict) -> Dict:
+    canvas["@id"] = update_obj_id(canvas)
+    canvas["images"] = [
+        update_image(i) for i in canvas["images"]
+    ]
+    return canvas
+
+
+def update_sequence(sequence: Dict) -> Dict:
+    sequence["@id"] = update_obj_id(sequence)
+    sequence["canvases"] = [
+        update_canvas(c) for c in sequence["canvases"]
+    ]
+    return sequence
+
+
+def update_manifest(manifest: Dict) -> Dict|None:
+    # in some cases, instead of a manifest, we have extracted { "response": "...", "reason": "..." }
+    # this is becase some data was deleted in aikon.
+    # in this case, don't migrate the manifest.
+    try:
+        manifest["@id"] = update_obj_id(manifest)
+    except KeyError:
+        return None
+
+    manifest["sequences"] = [
+        update_sequence(s) for s in manifest["sequences"]
+    ]
     return manifest
 
 # -------------------------------------------------------------
@@ -222,7 +254,8 @@ def pipeline(datatype: Literal["annotations","manifests"]):
         else:
             data = update_manifest(data)
 
-        json_write(data, fp_out)
+        if data is not None:
+            json_write(data, fp_out)
     return
 
 
