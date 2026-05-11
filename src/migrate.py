@@ -109,7 +109,12 @@ def update_iiif_uri(iiif_uri) -> Tuple[str,str]:
     - remove "/v2/" (useless since all annotations are directly on the digitization, not on the region)
     - update the IIIF short ID (remove the region_id part)
     """
-    uri_base, _, uri_tail = regex_split.split(iiif_uri)
+    try:
+        uri_base, _, uri_tail = regex_split.split(iiif_uri)
+    # non-aikon URI => can't extract or update it => pass
+    except ValueError:
+        logger.error(f"update_iiif_uri: can't process {iiif_uri}")
+        return iiif_uri, ""
     uri_base, new_short_id, old_short_id = update_iiif_base_uri(uri_base)
     iiif_uri = f"{uri_base}/{uri_tail}"
     return make_iiif_host_repl(iiif_uri), old_short_id
