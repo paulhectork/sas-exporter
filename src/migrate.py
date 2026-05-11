@@ -223,7 +223,10 @@ def update_canvas(canvas: Dict) -> Dict:
 
 
 def update_sequence(sequence: Dict) -> Dict:
-    sequence["@id"] = update_obj_id(sequence)
+    # manifest.sequence["@id"] is not important for aiiinotate
+    # => don't generate an @id if there isn't one.
+    if "@id" in sequence.keys():
+        sequence["@id"] = update_obj_id(sequence)
     sequence["canvases"] = [
         update_canvas(c) for c in sequence["canvases"]
     ]
