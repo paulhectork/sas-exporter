@@ -53,11 +53,15 @@ def get_alt_matches_for_manifest_uri(
     short_id_expand = expand_manifest_short_id(manifest_uri)
     if type(short_id_expand) == dict:
         if str(match_for) == "500":
-            cond = lambda ok_item: ok_item["short_id_dict"]["wit_id"] == short_id_expand["wit_id"]
+            cond = lambda ok_item: (
+                type(ok_item["short_id_expand"]) == dict
+                and ok_item["short_id_expand"]["wit_id"] == short_id_expand["wit_id"]
+            )
         else:
             cond = lambda ok_item: (
-                ok_item["short_id_dict"]["wit_id"] == short_id_expand["wit_id"]
-                and ok_item["short_id_dict"]["digit_id"] == short_id_expand["digit_id"]
+                type(ok_item["short_id_expand"]) == dict
+                and ok_item["short_id_expand"]["wit_id"] == short_id_expand["wit_id"]
+                and ok_item["short_id_expand"]["digit_id"] == short_id_expand["digit_id"]
             )
         return [
             {
@@ -101,10 +105,10 @@ def pipeline(datatype: Literal["annotations", "manifests"]):
     ok_json = json_read(SAVE_OK_FILE_ANNOTATIONS if datatype == "annotations" else SAVE_OK_FILE_MANIFESTS)
     err_json = json_read(SAVE_ERR_FILE_ANNOTATIONS if datatype == "annotations" else SAVE_ERR_FILE_MANIFESTS)
 
-    # add short_id_dict to ok_json
+    # add short_id_expand to ok_json
     ok_json = {
         manifest_uri: {
-            "short_id_dict": expand_manifest_short_id(manifest_uri),
+            "short_id_expand": expand_manifest_short_id(manifest_uri),
             **info
         }
         for manifest_uri, info in ok_json.items()
