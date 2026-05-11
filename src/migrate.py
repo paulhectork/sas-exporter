@@ -47,6 +47,7 @@ def update_short_id(short_id: str) -> str:
         raise ValueError(f"could not extract valid new short ID from '{short_id}'")
 
 
+regex_split_iiif = re.compile(r"(?<=iiif)\/")
 def update_iiif_base_uri(manifest_uri: str) -> Tuple[str,str,str]:
     """
     update a manifest's URI:
@@ -67,7 +68,10 @@ def update_iiif_base_uri(manifest_uri: str) -> Tuple[str,str,str]:
         wit124_man152
     )
     """
-    base, tail = manifest_uri.split("/v2/")
+    if "/v2/" in manifest_uri:
+        base, tail = manifest_uri.split("/v2/")
+    else:
+        base, tail = regex_split_iiif.split(manifest_uri)
     old_short_id = tail.split("/")[0]
     try:
         new_short_id = update_short_id(old_short_id)
