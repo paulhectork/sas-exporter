@@ -18,20 +18,24 @@ from .logger import logger
 
 STEP_NAME = "error_analysis"
 
-def expand_manifest_short_id(manifest_uri: str) -> dict[str, str|None]:
+def expand_manifest_short_id(manifest_uri: str) -> dict[str, str|None] | str:
     """
     a manifest's shortId has the structure:
         {witness_id}_{digitization_id}_{regions_id}?
     return an object-description of it
     """
     short_id = manifest_uri_to_short_id(manifest_uri)
-    short_id = short_id.split("_")
-    assert len(short_id) == 2 or len(short_id) == 3
-    return {
-        "wit_id": short_id[0],
-        "digit_id": short_id[1],
-        "region_id": short_id[2] if len(short_id) == 3 else None
-    }
+    short_id_split = short_id.split("_")
+
+    if len(short_id_split) == 2 or len(short_id_split) == 3:
+        return {
+            "wit_id": short_id_split[0],
+            "digit_id": short_id_split[1],
+            "region_id": short_id_split[2] if len(short_id_split) == 3 else None
+        }
+    # the short ID doesn´t follow the AIKON pattern {wit_id}_{digit_id}(_{region_id})? => return the unchanged short ID.
+    else:
+        return short_id
 
 def get_alt_matches_for_manifest_uri(
     match_for: Literal["500", "KeyError"],
@@ -40,27 +44,32 @@ def get_alt_matches_for_manifest_uri(
 ) -> list[dict[str,str]]:
     """
     for key errors, see if there are successful annotation
-        extractions for the sane digitization as the failed one:
+        extractions for the sane digitization as the failed one
         (same witness_id and digitization_id, different region_id)
     for HTTP 500 errors, see if there are successful annotation
-        extractions for the witness
-        (same witness_id, different digitization_id and region_id)
+        extractions for the witness (same witness_id, different
+        digitization_id and region_id)
     """
-    short_id_dict = expand_manifest_short_id(manifest_uri)
-    if str(match_for) == "500":
-        cond = lambda ok_item: ok_item["short_id_dict"]["wit_id"] == short_id_dict["wit_id"]
+    short_id_expand = expand_manifest_short_id(manifest_uri)
+    if type(short_id_expand) == dict:
+        if str(match_for) == "500":
+            cond = lambda ok_item: ok_item["short_id_dict"]["wit_id"] == short_id_expand["wit_id"]
+        else:
+            cond = lambda ok_item: (
+                ok_item["short_id_dict"]["wit_id"] == short_id_expand["wit_id"]
+                and ok_item["short_id_dict"]["digit_id"] == short_id_expand["digit_id"]
+            )
+        return [
+            {
+                "manifest_uri": _manifest_uri,
+                "path": ok_dict["path"]
+            }
+            for _manifest_uri, ok_dict in ok_json.items() if cond(ok_dict)
+        ]
+    # if the short ID couldnt be expanded to a Dict, it doesn´t follow the pattern {wit_id}_{digit_id}(_{region_id})?
+    # => impossible to get alt matches => return an empty array
     else:
-        cond = lambda ok_item: (
-            ok_item["short_id_dict"]["wit_id"] == short_id_dict["wit_id"]
-            and ok_item["short_id_dict"]["digit_id"] == short_id_dict["digit_id"]
-        )
-    return [
-        {
-            "manifest_uri": _manifest_uri,
-            "path": ok_dict["path"]
-        }
-        for _manifest_uri, ok_dict in ok_json.items() if cond(ok_dict)
-    ]
+        return []
 
 def get_alt_matches(match_for: Literal["500", "KeyError"], errors: list[dict], ok_json: dict):
     key = "witness" if match_for == "500" else "digitization"

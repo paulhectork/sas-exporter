@@ -69,12 +69,21 @@ def update_iiif_base_uri(manifest_uri: str) -> Tuple[str,str,str]:
     """
     base, tail = manifest_uri.split("/v2/")
     old_short_id = tail.split("/")[0]
-    new_short_id = update_short_id(old_short_id)
-    return (
-        f"{base}/{new_short_id}",
-        new_short_id,
-        old_short_id
-    )
+    try:
+        new_short_id = update_short_id(old_short_id)
+        return (
+            f"{base}/{new_short_id}",
+            new_short_id,
+            old_short_id
+        )
+    # if a new ID couldn´t be extracted, it's because the URI doesn´t follow the {wit_id}_{digit_id}_{region_id} pattern => don't bother updating.
+    except ValueError:
+        return (
+            f"{base}/{old_short_id}",
+            old_short_id,
+            old_short_id
+
+        )
 
 def make_iiif_host_repl(s:str) -> str:
     """
