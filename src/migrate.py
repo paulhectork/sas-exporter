@@ -242,11 +242,10 @@ def update_manifest(manifest: Dict) -> Dict|None:
     # in some cases, instead of a manifest, we have extracted { "response": "...", "reason": "..." }
     # this is becase some data was deleted in aikon.
     # in this case, don't migrate the manifest.
-    try:
-        manifest["@id"] = update_obj_id(manifest)
-    except KeyError:
+    if "@id" not in manifest.keys():
         return None
 
+    manifest["@id"] = update_obj_id(manifest)
     manifest["sequences"] = [
         update_sequence(s) for s in manifest["sequences"]
     ]
