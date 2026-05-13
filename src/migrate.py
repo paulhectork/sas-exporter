@@ -8,6 +8,10 @@ AIKON-SPECIFIC JSON structure migration script:
       - annotations are done directly on the digitization and not on the regions.
       - the precise regions extraction ID is referenced as a tag in the annotation
 
+IF manifest's short ID could not be extracted, remove the annotation: it would cause an error at import.
+in practice, since all annotations for a manifest are stored in the same AnnoList, it means that we remove
+all annotations from AnnotationLists pointing to outdated manifest URIs.
+
 => this script updates annotations and manifests with the OLD structure to annotations
 with the NEW structure. it also does some other minor changes.
 """
@@ -48,7 +52,7 @@ def update_short_id(short_id: str) -> str:
 
 
 regex_split_iiif = re.compile(r"(?<=iiif)\/")
-def update_iiif_base_uri(manifest_uri: str) -> Tuple[str,str,str]:
+def update_iiif_base_uri(manifest_uri: str) -> Tuple[str,str,str] | None:
     """
     update a manifest's URI:
     - replace a manifest's short ID
@@ -82,12 +86,7 @@ def update_iiif_base_uri(manifest_uri: str) -> Tuple[str,str,str]:
         )
     # if a new ID couldn´t be extracted, it's because the URI doesn´t follow the {wit_id}_{digit_id}_{region_id} pattern => don't bother updating.
     except ValueError:
-        return (
-            f"{base}/{old_short_id}",
-            old_short_id,
-            old_short_id
-
-        )
+        return None
 
 def make_iiif_host_repl(s:str) -> str:
     """
@@ -138,7 +137,6 @@ def update_dict_target(target: dict) -> Tuple[dict, str]:
             "@type": "sc:Manifest"
         }
         target["within"] = within
-
     manifest_uri, old_short_id = update_iiif_uri(target["within"]["@id"])
     canvas_uri, _ = update_iiif_uri(target["full"])
     target["within"]["@id"] = manifest_uri
@@ -165,16 +163,21 @@ def update_target_recursive(target: Any, inner: bool = False):
         # and so only extract the 1st target short ID.
         old_short_id = result[0][1]
     else:
-        raise TypeError(f"only supported types are 'str', 'dict', 'list'. got {type(target)}")
-
+        s = f"only supported types are 'str', 'dict', 'list'. got {type(target)}"
+        logger.error(s)
+        raise TypeError(s)
     return target, old_short_id
 
-def update_annotation(annotation: Dict):
+def update_annotation(annotation: Dict) -> Dict|None:
     annotation["@id"] = ""  # aiiinotate recreates an @id
 
     # 1. update the annotation.on
     target = annotation.get("on")
-    target, old_short_id = update_target_recursive(target, False)
+    try:
+        target, old_short_id = update_target_recursive(target, False)
+    # update_iiif_base_uri returned None => the witness ID doesn't work which will cause issues with AIKON import => don't update the annotation
+    except TypeError:
+        return None
     annotation["on"] = target
 
     # 2. log the region extraction id to a tag in the annotation's body
@@ -206,7 +209,9 @@ def update_annotation(annotation: Dict):
 def update_annotation_list(annotation_list: Dict) -> Dict:
     annotation_array = []
     for annotation in annotation_list.get("resources", []):
-        annotation_array.append(update_annotation(annotation))
+        annotation = update_annotation(annotation)
+        if annotation is not None:
+            annotation_array.append(update_annotation(annotation))
     annotation_list["resources"] = annotation_array
     return annotation_list
 
@@ -245,7 +250,11 @@ def update_manifest(manifest: Dict) -> Dict|None:
     if "@id" not in manifest.keys():
         return None
 
-    manifest["@id"] = update_obj_id(manifest)
+    try:
+        manifest["@id"] = update_obj_id(manifest)
+    # manifest short ID is outdated => manifest is unavailable => don't bother updating it
+    except TypeError:
+        return None
     manifest["sequences"] = [
         update_sequence(s) for s in manifest["sequences"]
     ]
@@ -258,6 +267,8 @@ def pipeline(datatype: Literal["annotations","manifests"]):
     indir = ANNOTATIONS_DIR if datatype == "annotations" else MANIFESTS_DIR
     outdir = ANNOTATIONS_MIGRATE_DIR if datatype == "annotations" else MANIFESTS_MIGRATE_DIR
 
+    empty = 0
+    total = 0
     # update each AnnotationList and write to file
     for fp, data in tqdm(
         json_read_from_dir(indir),
@@ -268,6 +279,8 @@ def pipeline(datatype: Literal["annotations","manifests"]):
 
         if datatype == "annotations":
             data = update_annotation_list(data)
+            if len(data.get("resources", [])) == 0:
+                empty += 1
         else:
             data = update_manifest(data)
             # to avoid duplicate manifests, update file basename
@@ -275,10 +288,15 @@ def pipeline(datatype: Literal["annotations","manifests"]):
             # region IDs for the same manifest
             if data is not None:
                 fn = f"{data['@id'].split('/')[-2]}.json"
+            else:
+                empty += 1
 
         if data is not None:
             fp_out = outdir / fn
             json_write(data, fp_out)
+        total += 1
+
+    logger.info(f"total {datatype}: {total}, has data: {total-empty}, no data: {empty}")
     return
 
 

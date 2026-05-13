@@ -1,3 +1,4 @@
+import re
 import aiohttp
 import asyncio
 from orjson import JSONDecodeError
@@ -10,7 +11,8 @@ from .utils import (
     fetch_to_json,
     json_read_from_dir,
     make_session,
-    make_semaphore
+    make_semaphore,
+    json_dumps
 )
 from .logger import logger
 
@@ -24,12 +26,27 @@ async def validate_manifest(session: aiohttp.ClientSession, manifest_url: str) -
     if there's a JSONDecodeError, the manifest could not be fetched
     """
     try:
-        await fetch_to_json(SEMAPHORE, session, manifest_url)
-        return manifest_url
+        manifest = await fetch_to_json(SEMAPHORE, session, manifest_url)
+        if manifest.get("@id") and manifest.get("sequences"):  # pyright: ignore . check if it looks like a valid manifest
+            return manifest_url
+        return None  # if it's not a valid manifest, return None
     except aiohttp.ClientResponseError:
         return None
     except JSONDecodeError:
         return None
+
+rgx_anno = re.compile(r"_anno\d+")
+def get_manifest_url(anno_target: list|dict|str):
+    if isinstance(anno_target, list):
+        return get_manifest_url(anno_target[0])
+    elif isinstance(anno_target, dict):
+        url = anno_target["full"]
+    elif isinstance(anno_target, str):
+        url = anno_target
+    # reconstruct a manifest URL + drop the _annoXXX part so that the AIKON manifest can be fetched
+    manifest_url = "/".join( url.replace("/v2/", "/").split("/")[:-2] ) + "/manifest.json"
+    manifest_url = rgx_anno.sub("", manifest_url)
+    return manifest_url
 
 async def pipeline():
     # extract a list of all unique manifest URIs from all annotation targets in all annotations in ANNOTATIONS_DIR
@@ -40,9 +57,10 @@ async def pipeline():
     for fp, annotation_list in json_read_from_dir(ANNOTATIONS_DIR):
         if len(annotation_list.keys()):
             manifest_urls = set([
-                "/".join( anno["on"].split("/")[:-2] ) + "/manifest.json"
+                get_manifest_url(anno["on"])
                 for anno in annotation_list.get("resources", [])
             ])
+            print(manifest_urls)
             all_annotation_list_mapper[fp] = manifest_urls
             all_manifest_urls.extend(manifest_urls)
     all_manifest_urls = set(all_manifest_urls)
