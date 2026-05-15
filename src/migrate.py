@@ -38,7 +38,7 @@ STEP_NAME = "migrate"
 # -------------------------------------------------------------
 # UTILS
 
-regex_short_id = re.compile(r"^(wit\d+_[a-z]+\d+)_anno\d+$")
+regex_short_id = re.compile(r"^(wit\d+_[a-z]+\d+)(_anno\d+)?$")
 def update_short_id(short_id: str) -> str:
     """
     input  : wit124_man152_anno228
@@ -178,6 +178,7 @@ def update_annotation(annotation: Dict) -> Dict|None:
     # update_iiif_base_uri returned None => the witness ID doesn't work which will cause issues with AIKON import => don't update the annotation
     except TypeError:
         return None
+
     annotation["on"] = target
 
     # 2. log the region extraction id to a tag in the annotation's body
@@ -211,7 +212,7 @@ def update_annotation_list(annotation_list: Dict) -> Dict:
     for annotation in annotation_list.get("resources", []):
         annotation = update_annotation(annotation)
         if annotation is not None:
-            annotation_array.append(update_annotation(annotation))
+            annotation_array.append(annotation)
     annotation_list["resources"] = annotation_array
     return annotation_list
 
